@@ -840,7 +840,8 @@ export function DomainResult({ data }: { data: DomainCheckResult }) {
           <Verdict tone="warning" title="Archive lookup failed">
             <p>{data.wayback.error}</p>
           </Verdict>
-        ) : !data.wayback.firstSnapshotAt ? (
+        ) : !data.wayback.firstSnapshotAt &&
+          !data.wayback.totalSnapshots ? (
           <p className="text-sm text-gray-500">
             No snapshots of this domain in the Internet Archive.
           </p>

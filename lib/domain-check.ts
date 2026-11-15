@@ -350,52 +350,59 @@ async function checkHeaders(domain: string): Promise<HeadersResult> {
 }
 
 async function checkSubdomains(domain: string): Promise<SubdomainResult> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), CRT_TIMEOUT_MS);
-  try {
-    const res = await fetch(
-      `https://crt.sh/?q=%25.${encodeURIComponent(domain)}&output=json`,
-      { headers: { "User-Agent": USER_AGENT }, signal: controller.signal },
+  // crt.sh is flaky (502s, timeouts, stray 404s) — retry once with a
+  // shorter timeout per attempt, so the worst case stays ~10s.
+  let lastError = "Could not reach crt.sh";
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(),
+      CRT_TIMEOUT_MS / 2,
     );
-    if (!res.ok) {
-      return {
-        ok: false,
-        error: `crt.sh responded with HTTP ${res.status}`,
-        total: 0,
-        subdomains: [],
-        truncated: false,
-      };
-    }
-    const data = (await res.json()) as { name_value?: string }[];
-    const names = new Set<string>();
-    for (const row of data) {
-      for (const part of (row.name_value ?? "").split("\n")) {
-        const name = part.trim().toLowerCase();
-        if (!name) continue;
-        if (name === domain || name.endsWith(`.${domain}`)) names.add(name);
+    try {
+      const res = await fetch(
+        `https://crt.sh/?q=%25.${encodeURIComponent(domain)}&output=json`,
+        { headers: { "User-Agent": USER_AGENT }, signal: controller.signal },
+      );
+      if (!res.ok) {
+        lastError = `crt.sh responded with HTTP ${res.status}`;
+        continue;
       }
-    }
-    const all = [...names].sort();
-    return {
-      ok: true,
-      total: all.length,
-      subdomains: all.slice(0, SUBDOMAIN_CAP),
-      truncated: all.length > SUBDOMAIN_CAP,
-    };
-  } catch (err) {
-    return {
-      ok: false,
-      error:
+      const data = (await res.json()) as { name_value?: string }[];
+      const names = new Set<string>();
+      for (const row of data) {
+        for (const part of (row.name_value ?? "").split("\n")) {
+          const name = part.trim().toLowerCase();
+          if (!name) continue;
+          if (name === domain || name.endsWith(`.${domain}`)) names.add(name);
+        }
+      }
+      const all = [...names].sort();
+      return {
+        ok: true,
+        total: all.length,
+        subdomains: all.slice(0, SUBDOMAIN_CAP),
+        truncated: all.length > SUBDOMAIN_CAP,
+      };
+    } catch (err) {
+      lastError =
         err instanceof Error && err.name === "AbortError"
           ? "crt.sh request timed out"
-          : "Could not reach crt.sh",
-      total: 0,
-      subdomains: [],
-      truncated: false,
-    };
-  } finally {
-    clearTimeout(timer);
+          : "Could not reach crt.sh";
+    } finally {
+      clearTimeout(timer);
+    }
   }
+  return {
+    ok: false,
+    error: lastError,
+    total: 0,
+    subdomains: [],
+    truncated: false,
+  };
 }
 
 export async function checkDomain(

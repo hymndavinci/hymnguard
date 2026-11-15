@@ -12,11 +12,15 @@ const DNS_TIMEOUT_MS = 5000;
 // Common DKIM selectors. A domain only needs one published selector to
 // count as "DKIM present" — the list is a best-effort probe, not a
 // guarantee that no other selector exists. Google uses date-based
-// selectors for gmail.com (20230601 is current; 20161025 is still
-// published), while Google Workspace customer domains use `google`.
+// selectors for gmail.com and rotates them every couple of years:
+// 20251104 is current as of Nov 2026 (verified from a real Gmail
+// DKIM-Signature header); 20230601 and 20161025 are revoked (empty p=)
+// and are kept only so the probe list documents the rotation history.
+// Google Workspace customer domains use `google`.
 const DKIM_SELECTORS = [
   "default",
   "google",
+  "20251104",
   "20230601",
   "20161025",
   "selector1",
