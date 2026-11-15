@@ -39,7 +39,7 @@ const TABS: TabConfig[] = [
     id: "email",
     label: "Email",
     placeholder: "you@example.com",
-    hint: "Mail records, plus a breach lookup when a HIBP key is configured.",
+    hint: "Mail records, breach lookups, email authentication, infostealer exposure, and optional account enumeration after ownership verification.",
     privacy: "Checked and discarded — never stored.",
   },
   {
@@ -98,10 +98,26 @@ function summaryFor(result: CheckResultState): string {
   switch (result.type) {
     case "email": {
       if (!result.data.mxOk) return "No MX records";
-      if (!result.data.hibp.available) return "MX ok · Breach lookup not configured";
-      if (result.data.hibp.rateLimited) return "MX ok · Breach lookup rate-limited";
-      const count = result.data.hibp.breaches?.length ?? 0;
-      return count > 0 ? `Found in ${count} breach${count === 1 ? "" : "es"}` : "No breaches found";
+      const parts: string[] = [];
+      if (result.data.hibp.available) {
+        const count = result.data.hibp.breaches?.length ?? 0;
+        parts.push(count > 0 ? `HIBP: ${count} breach${count === 1 ? "" : "es"}` : "HIBP: clean");
+      }
+      if (result.data.leakcheck.status === "ok") {
+        parts.push(`LeakCheck: ${result.data.leakcheck.found} records`);
+      }
+      if (
+        result.data.hudsonrock.status === "ok" &&
+        result.data.hudsonrock.associated
+      ) {
+        parts.push("Infostealer: exposed");
+      }
+      if (result.data.github.available && result.data.github.result?.status === "ok") {
+        const total = result.data.github.result.total;
+        if (total > 0) parts.push(`GitHub: ${total} commits`);
+      }
+      parts.push(`Auth ${result.data.auth.grade}`);
+      return parts.length > 0 ? parts.join(" · ") : "MX ok";
     }
     case "username":
       return `Found on ${result.data.summary.found} of ${result.data.sites.length} sites`;

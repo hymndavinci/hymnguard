@@ -26,6 +26,10 @@ No auth, no database. History in localStorage (max 20). Rate limit 10/min/IP per
 
 ---
 
+## Execution order
+
+Phases run sequentially, each verified and deployed before the next starts. Current order (Bintang, 2026-11-15): Phase 1 → Phase 3 (email) → Phase 2 (domain & IP) → Phase 4 → Phase 5 → Phase 6 → Phase 7. Email was pulled ahead of domain/IP at Bintang's direction ("email dlu").
+
 ## Phase 1 — Username: full coverage (IN PROGRESS)
 
 - Port Sherlock's full site list (`data.json`, 400+ sites) into `lib/username-sites.ts`.

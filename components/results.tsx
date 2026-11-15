@@ -10,6 +10,7 @@ import type {
   PhoneCheckResult,
   UsernameCheckResult,
 } from "@/lib/api-types";
+import EmailEnumeration from "./email-enumeration";
 
 function formatNumber(value: number): string {
   return value.toLocaleString("en-US");
@@ -600,8 +601,56 @@ export function PhoneResult({ data }: { data: PhoneCheckResult }) {
 
 // -------------------------------------------------------------------- email
 
+function ConfidenceTag({ label }: { label: string }) {
+  return (
+    <span className="ml-2 rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 font-mono text-[10px] font-medium text-gray-500">
+      {label}
+    </span>
+  );
+}
+
+function AuthRow({
+  name,
+  present,
+  detail,
+  hint,
+}: {
+  name: string;
+  present: boolean;
+  detail: string;
+  hint: string;
+}) {
+  return (
+    <tr>
+      <td className="px-4 py-2.5 font-mono text-[13px] font-medium">{name}</td>
+      <td className="hidden px-4 py-2.5 text-[13px] text-gray-500 sm:table-cell">
+        {hint}
+      </td>
+      <td className="px-4 py-2.5 text-right">
+        {present ? (
+          <span className="inline-flex items-center gap-1.5 text-green-700">
+            <CheckIcon />
+            <span className="font-mono text-[13px]">{detail}</span>
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-gray-500">
+            <XIcon />
+            <span className="text-[13px]">Missing</span>
+          </span>
+        )}
+      </td>
+    </tr>
+  );
+}
+
 export function EmailResult({ data }: { data: EmailCheckResponse }) {
   const hibp = data.hibp;
+  const auth = data.auth;
+  const leakcheck = data.leakcheck;
+  const osintcat = data.osintcat;
+  const hudsonrock = data.hudsonrock;
+  const github = data.github;
+
   return (
     <div className="space-y-6">
       <div className="space-y-3">
@@ -650,36 +699,341 @@ export function EmailResult({ data }: { data: EmailCheckResponse }) {
       </div>
 
       <div className="space-y-3 border-t border-gray-100 pt-6">
+        <SectionTitle>
+          Email authentication
+          <span className="ml-2 font-mono text-xs font-normal text-gray-500">
+            {data.domain}
+          </span>
+        </SectionTitle>
+        {auth.error ? (
+          <Verdict tone="warning" title="Authentication records could not be checked">
+            <p>{auth.error}</p>
+          </Verdict>
+        ) : (
+          <>
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 font-mono text-xl font-semibold">
+                {auth.grade}
+              </div>
+              <div>
+                <p className="text-sm font-medium">{auth.score} / 100</p>
+                <p className="text-[13px] text-gray-500">
+                  {auth.grade === "A" || auth.grade === "B"
+                    ? "This domain is well protected against email spoofing."
+                    : "This domain can be spoofed more easily — senders should publish SPF, DKIM, and DMARC."}
+                </p>
+              </div>
+            </div>
+            <div className="overflow-hidden rounded-lg border border-gray-200">
+              <table className="w-full text-sm">
+                <tbody className="divide-y divide-gray-100">
+                  <AuthRow
+                    name="SPF"
+                    present={auth.spf.present}
+                    detail={
+                      auth.spf.policy === "hardfail"
+                        ? "-all (strict)"
+                        : auth.spf.policy === "softfail"
+                          ? "~all (soft)"
+                          : auth.spf.policy === "neutral"
+                            ? "?all (neutral)"
+                            : auth.spf.policy === "pass"
+                              ? "+all (weak)"
+                              : "present"
+                    }
+                    hint="Authorizes which servers may send mail for this domain"
+                  />
+                  <AuthRow
+                    name="DKIM"
+                    present={auth.dkim.present}
+                    detail={
+                      auth.dkim.selectors.length > 0
+                        ? auth.dkim.selectors.join(", ")
+                        : "present"
+                    }
+                    hint="Cryptographic signature proving the mail is genuine"
+                  />
+                  <AuthRow
+                    name="DMARC"
+                    present={auth.dmarc.present}
+                    detail={
+                      auth.dmarc.policy ? `p=${auth.dmarc.policy}` : "present"
+                    }
+                    hint="Tells receivers what to do with mail that fails SPF/DKIM"
+                  />
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs leading-relaxed text-gray-500">
+              This grades the domain&apos;s anti-spoofing setup, not the
+              mailbox itself. A weak grade means anyone can more easily forge
+              mail that looks like it comes from @{data.domain}.
+            </p>
+          </>
+        )}
+      </div>
+
+      <div className="space-y-3 border-t border-gray-100 pt-6">
         <SectionTitle>Data breaches</SectionTitle>
-        {!hibp.available ? (
-          <Verdict
-            tone="warning"
-            title="Breach lookup is not configured on this deployment"
-          >
+        <p className="text-[13px] text-gray-500">
+          Checked against several breach indexes. Only breach metadata is
+          shown — never breach contents.
+        </p>
+
+        {/* HIBP — gold standard */}
+        <div className="space-y-3 rounded-lg border border-gray-200 p-4">
+          <p className="text-sm font-semibold">
+            Have I Been Pwned
+            <ConfidenceTag label="gold standard" />
+          </p>
+          {!hibp.available ? (
+            <Verdict
+              tone="warning"
+              title="Breach lookup is not configured on this deployment"
+            >
+              <p>
+                Email breach lookup needs a Have I Been Pwned API key (paid,
+                from $4/month). No key is configured, so no breach result is
+                shown — rather than a fake one.
+              </p>
+            </Verdict>
+          ) : hibp.rateLimited ? (
+            <Verdict tone="warning" title="Breach lookup is rate-limited">
+              <p>
+                Have I Been Pwned is throttling requests right now. Try again
+                in a few minutes.
+              </p>
+            </Verdict>
+          ) : hibp.breaches && hibp.breaches.length > 0 ? (
+            <>
+              <Verdict
+                tone="danger"
+                title={`Found in ${hibp.breaches.length} data breach${hibp.breaches.length === 1 ? "" : "es"}`}
+              >
+                <p>
+                  This email appears in known breaches. Change the password on
+                  every affected account, and enable two-factor authentication
+                  where it is offered.
+                </p>
+              </Verdict>
+              <div className="overflow-hidden rounded-lg border border-gray-200">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-gray-50 text-left">
+                      <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-gray-500">
+                        Breach
+                      </th>
+                      <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-gray-500">
+                        Date
+                      </th>
+                      <th className="hidden px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-gray-500 sm:table-cell">
+                        Accounts
+                      </th>
+                      <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-gray-500">
+                        Data exposed
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {hibp.breaches.map((breach) => (
+                      <tr key={breach.name}>
+                        <td className="px-4 py-2.5 font-medium">{breach.title}</td>
+                        <td className="px-4 py-2.5 font-mono text-[13px]">
+                          {breach.breachDate}
+                        </td>
+                        <td className="hidden px-4 py-2.5 font-mono text-[13px] sm:table-cell">
+                          {formatNumber(breach.pwnCount)}
+                        </td>
+                        <td className="px-4 py-2.5 text-[13px] text-gray-600">
+                          {breach.dataClasses.join(", ")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <Verdict tone="ok" title="No breaches found for this email">
+              <p>
+                This email does not appear in any breach known to Have I Been
+                Pwned. New breaches surface over time, so this is a
+                point-in-time result.
+              </p>
+            </Verdict>
+          )}
+        </div>
+
+        {/* LeakCheck — aggregator */}
+        <div className="space-y-3 rounded-lg border border-gray-200 p-4">
+          <p className="text-sm font-semibold">
+            LeakCheck
+            <ConfidenceTag label="aggregator" />
+          </p>
+          {leakcheck.status === "error" ? (
+            <Verdict tone="warning" title="LeakCheck lookup failed">
+              <p>{leakcheck.error}</p>
+            </Verdict>
+          ) : leakcheck.status === "not_found" ? (
+            <Verdict tone="ok" title="Not found in the LeakCheck index">
+              <p>
+                This email does not appear in LeakCheck&apos;s breach index.
+              </p>
+            </Verdict>
+          ) : (
+            <>
+              <Verdict
+                tone="danger"
+                title={`Found in ${formatNumber(leakcheck.found)} breach record${leakcheck.found === 1 ? "" : "s"}`}
+              >
+                <p>
+                  This email appears in LeakCheck&apos;s index, which includes
+                  stealer logs. Change the password on every affected account
+                  and enable two-factor authentication.
+                </p>
+              </Verdict>
+              {leakcheck.sources.length > 0 ? (
+                <div className="overflow-hidden rounded-lg border border-gray-200">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 bg-gray-50 text-left">
+                        <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-gray-500">
+                          Source
+                        </th>
+                        <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-gray-500">
+                          Date
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {leakcheck.sources.map((source) => (
+                        <tr key={`${source.name}-${source.date}`}>
+                          <td className="px-4 py-2.5 font-medium">{source.name}</td>
+                          <td className="px-4 py-2.5 font-mono text-[13px]">
+                            {source.date || "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+              {leakcheck.fields.length > 0 ? (
+                <p className="text-[13px] text-gray-600">
+                  Data categories seen: {leakcheck.fields.join(", ")}.
+                </p>
+              ) : null}
+            </>
+          )}
+          <p className="text-xs text-gray-500">
+            Powered by{" "}
+            <a
+              href="https://leakcheck.io"
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-gray-700 underline-offset-2 hover:text-black hover:underline"
+            >
+              LeakCheck
+            </a>
+            .
+          </p>
+        </div>
+
+        {/* OsintCat — aggregator, keyed */}
+        <div className="space-y-3 rounded-lg border border-gray-200 p-4">
+          <p className="text-sm font-semibold">
+            OsintCat
+            <ConfidenceTag label="aggregator" />
+          </p>
+          {!osintcat.available ? (
+            <Verdict
+              tone="info"
+              title="OsintCat lookup is not configured on this deployment"
+            >
+              <p>
+                OsintCat breach lookup needs an API key (OSINTCAT_API_KEY).
+                No key is configured, so no result is shown.
+              </p>
+            </Verdict>
+          ) : osintcat.result?.status === "error" ? (
+            <Verdict tone="warning" title="OsintCat lookup failed">
+              <p>{osintcat.result.error}</p>
+            </Verdict>
+          ) : osintcat.result?.status === "rate_limited" ? (
+            <Verdict tone="warning" title="OsintCat lookup is rate-limited">
+              <p>The daily OsintCat allowance is used up. Try again tomorrow.</p>
+            </Verdict>
+          ) : osintcat.result?.status === "not_found" ? (
+            <Verdict tone="ok" title="Not found in the OsintCat index">
+              <p>This email does not appear in OsintCat&apos;s breach index.</p>
+            </Verdict>
+          ) : osintcat.result?.status === "ok" ? (
+            <>
+              <Verdict
+                tone="danger"
+                title={`Found in ${formatNumber(osintcat.result.total)} breach record${osintcat.result.total === 1 ? "" : "s"}`}
+              >
+                <p>
+                  This email appears in OsintCat&apos;s breach index. Change
+                  the password on every affected account.
+                </p>
+              </Verdict>
+              <div className="overflow-hidden rounded-lg border border-gray-200">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-gray-50 text-left">
+                      <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-gray-500">
+                        Source
+                      </th>
+                      <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-gray-500">
+                        Records
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {osintcat.result.sources.map((source) => (
+                      <tr key={source.name}>
+                        <td className="px-4 py-2.5 font-medium">{source.name}</td>
+                        <td className="px-4 py-2.5 font-mono text-[13px]">
+                          {formatNumber(source.count)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="space-y-3 border-t border-gray-100 pt-6">
+        <SectionTitle>
+          Infostealer exposure
+          <ConfidenceTag label="Hudson Rock" />
+        </SectionTitle>
+        {hudsonrock.status === "error" ? (
+          <Verdict tone="warning" title="Infostealer lookup failed">
+            <p>{hudsonrock.error}</p>
+          </Verdict>
+        ) : !hudsonrock.associated ? (
+          <Verdict tone="ok" title="No infostealer infection found">
             <p>
-              Email breach lookup needs a Have I Been Pwned API key (paid,
-              from $4/month). No key is configured, so no breach result is
-              shown — rather than a fake one.
+              This email is not associated with any computer infected by
+              info-stealing malware in Hudson Rock&apos;s database.
             </p>
           </Verdict>
-        ) : hibp.rateLimited ? (
-          <Verdict tone="warning" title="Breach lookup is rate-limited">
-            <p>
-              Have I Been Pwned is throttling requests right now. Try again in
-              a few minutes.
-            </p>
-          </Verdict>
-        ) : hibp.breaches && hibp.breaches.length > 0 ? (
+        ) : (
           <>
             <Verdict
               tone="danger"
-              title={`Found in ${hibp.breaches.length} data breach${hibp.breaches.length === 1 ? "" : "es"}`}
+              title={`Associated with ${hudsonrock.stealers.length} infected computer${hudsonrock.stealers.length === 1 ? "" : "s"}`}
             >
               <p>
-                This email appears in known breaches. Change the password on
-                every affected account, and enable two-factor authentication
-                where it is offered. Only breach metadata is shown here —
-                never breach contents.
+                This email was found on a computer infected by info-stealing
+                malware. Credentials saved on that machine should be treated
+                as compromised: change passwords from a clean device, revoke
+                sessions, and enable two-factor authentication everywhere.
               </p>
             </Verdict>
             <div className="overflow-hidden rounded-lg border border-gray-200">
@@ -687,31 +1041,141 @@ export function EmailResult({ data }: { data: EmailCheckResponse }) {
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50 text-left">
                     <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Breach
+                      Compromised
                     </th>
                     <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Date
+                      Machine
                     </th>
                     <th className="hidden px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-gray-500 sm:table-cell">
-                      Accounts
+                      OS
                     </th>
                     <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-gray-500">
-                      Data exposed
+                      Services hit
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {hibp.breaches.map((breach) => (
-                    <tr key={breach.name}>
-                      <td className="px-4 py-2.5 font-medium">{breach.title}</td>
+                  {hudsonrock.stealers.map((stealer, i) => (
+                    <tr key={`${stealer.computerName ?? "machine"}-${i}`}>
                       <td className="px-4 py-2.5 font-mono text-[13px]">
-                        {breach.breachDate}
+                        {stealer.dateCompromised
+                          ? new Date(stealer.dateCompromised).toLocaleDateString("en-US", {
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric",
+                            })
+                          : "—"}
                       </td>
-                      <td className="hidden px-4 py-2.5 font-mono text-[13px] sm:table-cell">
-                        {formatNumber(breach.pwnCount)}
+                      <td className="px-4 py-2.5 font-mono text-[13px]">
+                        {stealer.computerName ?? "—"}
+                      </td>
+                      <td className="hidden px-4 py-2.5 text-[13px] text-gray-600 sm:table-cell">
+                        {stealer.operatingSystem ?? "—"}
+                      </td>
+                      <td className="px-4 py-2.5 font-mono text-[13px]">
+                        {stealer.totalCorporateServices + stealer.totalUserServices}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs leading-relaxed text-gray-500">
+              Only infection metadata is shown — never stolen passwords,
+              logins, or IP addresses. Source: Hudson Rock Cavalier.
+            </p>
+          </>
+        )}
+      </div>
+
+      <div className="space-y-3 border-t border-gray-100 pt-6">
+        <SectionTitle>GitHub exposure</SectionTitle>
+        {!github.available ? (
+          <Verdict
+            tone="info"
+            title="GitHub exposure lookup is not configured on this deployment"
+          >
+            <p>
+              Searching public commits for this email needs a GitHub token
+              (GITHUB_TOKEN). No token is configured, so no result is shown.
+            </p>
+          </Verdict>
+        ) : github.result?.status === "error" ? (
+          <Verdict tone="warning" title="GitHub lookup failed">
+            <p>{github.result.error}</p>
+          </Verdict>
+        ) : github.result?.status === "rate_limited" ? (
+          <Verdict tone="warning" title="GitHub lookup is rate-limited">
+            <p>GitHub is throttling search requests. Try again in a minute.</p>
+          </Verdict>
+        ) : github.result?.status === "ok" && github.result.total === 0 ? (
+          <Verdict tone="ok" title="No public commits found with this email">
+            <p>
+              This email does not appear as an author address in any public
+              GitHub commit.
+            </p>
+          </Verdict>
+        ) : github.result?.status === "ok" ? (
+          <>
+            <Verdict
+              tone="warning"
+              title={`Exposed in ${formatNumber(github.result.total)} public commit${github.result.total === 1 ? "" : "s"}`}
+            >
+              <p>
+                This email appears as an author address in public GitHub
+                commits, linking it to a GitHub identity. Consider using
+                GitHub&apos;s private noreply email for future commits; past
+                commits stay in git history unless rewritten.
+              </p>
+            </Verdict>
+            <div className="overflow-hidden rounded-lg border border-gray-200">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50 text-left">
+                    <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-gray-500">
+                      Repository
+                    </th>
+                    <th className="hidden px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-gray-500 sm:table-cell">
+                      Author
+                    </th>
+                    <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-gray-500">
+                      Commit
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {github.result.commits.map((commit) => (
+                    <tr key={`${commit.repo}-${commit.url}`}>
+                      <td className="px-4 py-2.5 font-mono text-[13px]">
+                        {commit.url ? (
+                          <a
+                            href={commit.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-gray-700 underline-offset-2 hover:text-black hover:underline"
+                          >
+                            {commit.repo}
+                          </a>
+                        ) : (
+                          commit.repo
+                        )}
+                      </td>
+                      <td className="hidden px-4 py-2.5 text-[13px] text-gray-600 sm:table-cell">
+                        {commit.authorName}
                       </td>
                       <td className="px-4 py-2.5 text-[13px] text-gray-600">
-                        {breach.dataClasses.join(", ")}
+                        <span className="block truncate" title={commit.message}>
+                          {commit.message}
+                        </span>
+                        {commit.date ? (
+                          <span className="font-mono text-xs text-gray-500">
+                            {new Date(commit.date).toLocaleDateString("en-US", {
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric",
+                            })}
+                          </span>
+                        ) : null}
                       </td>
                     </tr>
                   ))}
@@ -719,15 +1183,15 @@ export function EmailResult({ data }: { data: EmailCheckResponse }) {
               </table>
             </div>
           </>
-        ) : (
-          <Verdict tone="ok" title="No breaches found for this email">
-            <p>
-              This email does not appear in any breach known to Have I Been
-              Pwned. New breaches surface over time, so this is a point-in-time
-              result.
-            </p>
-          </Verdict>
-        )}
+        ) : null}
+      </div>
+
+      <div className="space-y-3 border-t border-gray-100 pt-6">
+        <SectionTitle>Account enumeration</SectionTitle>
+        <EmailEnumeration
+          email={data.email}
+          available={data.enumeration.available}
+        />
       </div>
     </div>
   );
