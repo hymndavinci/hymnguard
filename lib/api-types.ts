@@ -9,10 +9,13 @@ import type {
 } from "./email-breach";
 import type { EnumChunkResult, EnumSiteResult } from "./email-enumeration";
 import type { GitHubExposureResult } from "./github-exposure";
+import type { HashCheckResult } from "./hash-check";
 import type { HibpBreachMeta, PwnedRangeEntry } from "./hibp";
 import type { IpCheckResult } from "./ip-check";
 import type { PhoneCheckResult } from "./phone-check";
+import type { UrlCheckResult } from "./url-check";
 import type { UsernameCheckResult } from "./username-check";
+import type { WalletCheckResult } from "./wallet-check";
 
 export type {
   DomainCheckResult,
@@ -20,12 +23,15 @@ export type {
   EnumChunkResult,
   EnumSiteResult,
   GitHubExposureResult,
+  HashCheckResult,
   HudsonRockResult,
   IpCheckResult,
   LeakCheckResult,
   OsintCatResult,
   PhoneCheckResult,
+  UrlCheckResult,
   UsernameCheckResult,
+  WalletCheckResult,
 };
 
 export interface PasswordCheckResponse {

@@ -17,6 +17,11 @@ export const ENV_KEY_MAP: Record<KeyProvider, string> = {
   otx: "OTX_API_KEY",
   abuseipdb: "ABUSEIPDB_API_KEY",
   ipqs: "IPQS_API_KEY",
+  virustotal: "VIRUSTOTAL_API_KEY",
+  malwarebazaar: "MALWAREBAZAAR_API_KEY",
+  hybridanalysis: "HYBRID_ANALYSIS_API_KEY",
+  safebrowsing: "SAFE_BROWSING_API_KEY",
+  etherscan: "ETHERSCAN_API_KEY",
 };
 
 export type ResolvedKeys = Partial<Record<KeyProvider, string>> & {
@@ -31,6 +36,11 @@ const PROVIDERS: KeyProvider[] = [
   "otx",
   "abuseipdb",
   "ipqs",
+  "virustotal",
+  "malwarebazaar",
+  "hybridanalysis",
+  "safebrowsing",
+  "etherscan",
 ];
 
 export async function resolveKeys(userId: string | null): Promise<ResolvedKeys> {

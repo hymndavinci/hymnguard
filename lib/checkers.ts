@@ -17,7 +17,12 @@ export type KeyProvider =
   | "github"
   | "otx"
   | "abuseipdb"
-  | "ipqs";
+  | "ipqs"
+  | "virustotal"
+  | "malwarebazaar"
+  | "hybridanalysis"
+  | "safebrowsing"
+  | "etherscan";
 
 export interface KeyProviderMeta {
   id: KeyProvider;
@@ -64,6 +69,36 @@ export const KEY_PROVIDERS: KeyProviderMeta[] = [
     envVar: "IPQS_API_KEY",
     where: "ipqualityscore.com (free tier, 1,000 lookups/mo)",
   },
+  {
+    id: "virustotal",
+    label: "VirusTotal",
+    envVar: "VIRUSTOTAL_API_KEY",
+    where: "virustotal.com (free tier, 500 req/day, 4/min)",
+  },
+  {
+    id: "malwarebazaar",
+    label: "MalwareBazaar",
+    envVar: "MALWAREBAZAAR_API_KEY",
+    where: "auth.abuse.ch (free Auth-Key)",
+  },
+  {
+    id: "hybridanalysis",
+    label: "Hybrid Analysis",
+    envVar: "HYBRID_ANALYSIS_API_KEY",
+    where: "hybrid-analysis.com (free Public API key)",
+  },
+  {
+    id: "safebrowsing",
+    label: "Google Safe Browsing",
+    envVar: "SAFE_BROWSING_API_KEY",
+    where: "Google Cloud Console (free tier, 10,000 req/day)",
+  },
+  {
+    id: "etherscan",
+    label: "Etherscan",
+    envVar: "ETHERSCAN_API_KEY",
+    where: "etherscan.io (free tier; one key covers Ethereum + BNB Chain)",
+  },
 ];
 
 export function isKeyProvider(value: string): value is KeyProvider {
@@ -84,7 +119,8 @@ export interface CheckerDef {
   placeholder: string;
   hint: string;
   privacy: string;
-  route: string;
+  /** API route for the check. Absent for client-only checkers (image). */
+  route?: string;
   sources: SourceDef[];
   /** Route-level cache TTL in seconds. 0 = never cached. */
   cacheTtlSec: number;
@@ -187,6 +223,60 @@ export const CHECKERS: CheckerDef[] = [
     cacheTtlSec: 0,
     sources: [
       { name: "HIBP Pwned Passwords", cost: "free", confidence: "high" },
+    ],
+  },
+  {
+    id: "hash",
+    label: "File hash",
+    placeholder: "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f",
+    hint: "MD5, SHA-1, or SHA-256 of a file — never the file itself. The EICAR test hash is pre-filled in the example.",
+    privacy: "Only the hash is sent to reputation sources. A hash no source has seen is reported as 'not found', never as 'clean'.",
+    route: "/api/check/hash",
+    cacheTtlSec: 86400,
+    sources: [
+      { name: "CIRCL hashlookup", cost: "free", confidence: "high" },
+      { name: "urlscan.io", cost: "free", confidence: "medium" },
+      { name: "VirusTotal", cost: "keyed", key: "virustotal", confidence: "high" },
+      { name: "MalwareBazaar", cost: "keyed", key: "malwarebazaar", confidence: "high" },
+      { name: "Hybrid Analysis", cost: "keyed", key: "hybridanalysis", confidence: "high" },
+      { name: "AlienVault OTX", cost: "keyed", key: "otx", confidence: "medium" },
+    ],
+  },
+  {
+    id: "url",
+    label: "URL",
+    placeholder: "https://example.com/login",
+    hint: "Full URL, http or https. The URL is only sent to reputation APIs — HymnGuard never fetches it.",
+    privacy: "The URL is sent to reputation sources (query and fragment included — they are part of the URL's identity). History stores it with the query and fragment stripped.",
+    route: "/api/check/url",
+    cacheTtlSec: 3600,
+    sources: [
+      { name: "urlscan.io", cost: "free", confidence: "medium" },
+      { name: "VirusTotal", cost: "keyed", key: "virustotal", confidence: "high" },
+      { name: "Google Safe Browsing", cost: "keyed", key: "safebrowsing", confidence: "high" },
+    ],
+  },
+  {
+    id: "image",
+    label: "Image",
+    placeholder: "Choose an image file",
+    hint: "EXIF metadata is read in your browser — the file never leaves your device.",
+    privacy: "Client-side only. The image is parsed locally with exifr; no upload, no server call, no API key. History stores only the file name.",
+    cacheTtlSec: 0,
+    sources: [
+      { name: "EXIF / XMP / IPTC (local)", cost: "free", confidence: "high" },
+    ],
+  },
+  {
+    id: "wallet",
+    label: "Wallet",
+    placeholder: "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+    hint: "Ethereum-style address (0x + 40 hex). Mixed-case addresses must pass the EIP-55 checksum.",
+    privacy: "Only public chain data is shown: balance and transaction metadata. No token holdings, no identity data.",
+    route: "/api/check/wallet",
+    cacheTtlSec: 3600,
+    sources: [
+      { name: "Etherscan (Ethereum + BNB Chain)", cost: "keyed", key: "etherscan", confidence: "high" },
     ],
   },
 ];

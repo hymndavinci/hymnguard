@@ -1,7 +1,8 @@
 # HymnGuard
 
 Free, universal security exposure checker. Check a password, username, email,
-domain, or phone number against public breach data and live records.
+domain, IP address, phone number, file hash, URL, image, or crypto wallet
+against public breach data and live records.
 
 **Live:** https://hymnguard.vercel.app
 
@@ -20,6 +21,10 @@ breach monitoring, and bring-your-own API keys (see "Accounts" below).
 | **IP** | ip-api.com + AbuseIPDB + Tor exit list (free; AbuseIPDB needs a free key) | Geolocation (country/city/region, approximate), ASN + ISP + organization, reverse DNS, VPN/proxy/hosting/mobile flags (ip-api.com), Tor exit-node status (dan.me.uk exit list), and AbuseIPDB reputation (abuse confidence score, report count, last reported — needs `ABUSEIPDB_API_KEY`). Public IPs only; private/loopback/reserved ranges are rejected. |
 | **Phone** | libphonenumber-js + offline ID prefix table + IPQS (keyed) + GetContact + Should I Answer (free) | Format, country, calling code, type, validity, plus Indonesian operator from the offline prefix table (42 prefixes, verified against Wikipedia's Indonesia numbering list — prefix shows the allocated operator; porting can change it). Carrier, line type, fraud score, active status, and leak flag via IPQS (needs `IPQS_API_KEY`, free tier; owner name and associated emails are never read or shown). Community spam reports from GetContact (report count, risk level, community verdict — aggregate signals only, no name tags or comments) and Should I Answer (NANP/+1 numbers only; the Indonesian subdomain's database is empty, so it is not used). Honest scope: no breach lookup — no free, legitimate source exists for that. Excluded after live verification: tellows (bot-blocked), whocalld (unreachable), spamcalls.net (unreliable redirects), Truecaller (account required). |
 | **Email** | DNS MX + email-auth grading + breach sources + GitHub exposure + account enumeration | MX records, disposable-domain note, and SPF/DKIM/DMARC grading (A–F) always run. Breach metadata from HIBP (paid key), LeakCheck (free, no key), OsintCat (keyed), and Hudson Rock infostealer records (free, no key) — metadata only, never breach contents. GitHub exposure searches public commits for the email (needs `GITHUB_TOKEN`). Account enumeration checks 7 verified sites (see below) and only runs after ownership verification. Any source without its key shows a clear "not configured" state instead of a fake result. |
+| **File hash** | CIRCL hashlookup + urlscan.io (free) + VirusTotal + MalwareBazaar + Hybrid Analysis + OTX (keyed) | MD5, SHA-1, or SHA-256 reputation. Only the hash is sent — never a file. CIRCL's known-file corpus (incl. a KnownMalicious flag) and urlscan.io's hash search were verified live both directions (EICAR test hash = known malicious; random hash = not found). VirusTotal (70+ engine verdicts), MalwareBazaar (abuse.ch sample database — needs a free Auth-Key since 2025), Hybrid Analysis (sandbox verdicts), and OTX file pulses are implemented from the public docs and show needs-key states until a key is configured. "Not found" in a source is reported as such — never as "clean". |
+| **URL** | urlscan.io (free) + VirusTotal + Google Safe Browsing (keyed) | The URL is only sent to reputation APIs — HymnGuard never fetches it (no SSRF surface). urlscan.io scan activity was verified live both directions (example.com = scans; never-scanned URL = none). VirusTotal URL report and Safe Browsing threat lists are implemented from the public docs and show needs-key states until a key is configured. A URL VirusTotal has never scanned reports "not previously scanned", not "clean". |
+| **Image** | exifr (client-side, free, no key) | EXIF/XMP/IPTC metadata read entirely in the browser — the file NEVER leaves the device; there is no API route for this checker. Shows camera/device, software, timestamps, exposure settings, and GPS coordinates when present (with a Maps link and a privacy warning — location data in photos is a real exposure vector). A stripped image gets a clear "no metadata found" verdict. 20 MB file cap. |
+| **Wallet** | Etherscan API v2 (keyed, free tier) | Balance, first/last activity, and transaction count for an Ethereum-style address, on Ethereum and BNB Chain — one Etherscan key covers both chains (the v2 API is unified; the old per-chain v1 endpoints were deprecated in August 2025). Addresses are validated client- and server-side, including the EIP-55 checksum for mixed-case addresses. Without a key the check reports "needs an Etherscan API key" — never an empty "clean" result. Only public chain data is shown: no token holdings, no identity data. (Implemented from the public docs; not yet tested live — no key has been available.) |
 
 ## Email enumeration
 
@@ -80,7 +85,7 @@ SMTP is blocked on Vercel, so it cannot be verified there).
 
 Optional email/password accounts (Phase 5). Without a database configured
 (`DATABASE_URL` unset), sign-in reports "not configured" and the app runs
-exactly as before — all six checkers work anonymously.
+exactly as before — all ten checkers work anonymously.
 
 - **Saved history** — checks run while signed in are stored as a SHA-256
   hash of the identifier plus a masked display hint (email/phone masked;
@@ -163,6 +168,11 @@ owner's Google Cloud Console. The schema reserves `users.provider` and
 | `OTX_API_KEY` | No | AlienVault OTX API key for the OTX passive DNS source in the domain checker. Free tier at https://otx.alienvault.com (sign up, then copy the key from your profile page). Without it, that source shows a "not configured" state. (Implemented from the public docs; not yet tested live — no key has been available.) |
 | `ABUSEIPDB_API_KEY` | No | AbuseIPDB API key for the IP reputation check. Free tier (1,000 checks/day) at https://www.abuseipdb.com (sign up, then create a key under API). Without it, IP checks still run geolocation + network signals and show a "not configured" state for reputation. (Implemented from the public docs; not yet tested live — no key has been available.) |
 | `IPQS_API_KEY` | No | IPQualityScore API key for the phone carrier + risk check (carrier, line type, fraud score, active status, leak flag). Free tier at https://www.ipqualityscore.com (sign up for a free API key; phone validation free tier reported at 1,000 lookups/month). Without it, phone checks still run format + prefix + spam reports and show a "not configured" state for carrier/risk. (Implemented from the public docs; not yet tested live — no key has been available.) |
+| `VIRUSTOTAL_API_KEY` | No | VirusTotal API key for the hash and URL reputation checks (70+ engine verdicts). Free tier (500 req/day, 4/min) at https://www.virustotal.com. Without it, both checkers still run their free sources and show a "not configured" state for VirusTotal. (Implemented from the public docs; not yet tested live — no key has been available.) |
+| `MALWAREBAZAAR_API_KEY` | No | MalwareBazaar Auth-Key for the hash checker (abuse.ch sample database). Free at https://auth.abuse.ch. Without it, the hash checker shows a "not configured" state for MalwareBazaar. (Implemented from the public docs; not yet tested live — no key has been available.) |
+| `HYBRID_ANALYSIS_API_KEY` | No | Hybrid Analysis API key for the hash checker (Falcon Sandbox verdicts). Free Public API key at https://www.hybrid-analysis.com. Without it, the hash checker shows a "not configured" state for Hybrid Analysis. (Implemented from the public docs; not yet tested live — no key has been available.) |
+| `SAFE_BROWSING_API_KEY` | No | Google Safe Browsing API key for the URL checker (malware / social-engineering / unwanted-software lists). Free tier (10,000 req/day) from Google Cloud Console. Without it, the URL checker shows a "not configured" state for Safe Browsing. (Implemented from the public docs; not yet tested live — no key has been available.) |
+| `ETHERSCAN_API_KEY` | No | Etherscan API key for the wallet checker (one key covers Ethereum + BNB Chain via the unified v2 API). Free tier at https://etherscan.io. Without it, the wallet check has no source at all and reports "needs an Etherscan API key". (Implemented from the public docs; not yet tested live — no key has been available.) |
 | `VERIFY_SECRET` | No* | Random secret for signing ownership-verification tokens. Required together with `RESEND_API_KEY` to enable account enumeration. Generate with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`. |
 | `RESEND_API_KEY` | No* | Resend API key for sending ownership-verification codes. Get one at https://resend.com (free tier available). Required together with `VERIFY_SECRET` to enable account enumeration. |
 | `RESEND_FROM` | No* | Sender address for verification codes. Resend's free tier only sends from `onboarding@resend.dev` to the account owner's own address — to send codes to arbitrary emails, verify a domain you own in Resend and set this to an address on it (e.g. `noreply@yourdomain.com`). |
@@ -210,7 +220,9 @@ database schema automatically.
 
 - Next.js 16 (App Router) + TypeScript + Tailwind CSS 4
 - Geist Sans / Geist Mono
-- All checks run server-side in Next.js API routes (`app/api/check/*`)
+- All checks run server-side in Next.js API routes (`app/api/check/*`),
+  except the image check, which is parsed client-side with exifr and has
+  no API route (the file never leaves the browser).
 - Accounts: Postgres (Neon) + raw SQL (`db/migrations/001_init.sql`).
   No ORM — the Prisma CLI cannot run in this project's build environment
   (it downloads engine binaries and the egress proxy aborts those
@@ -233,3 +245,7 @@ database schema automatically.
 - Blocklists: [Spamhaus](https://www.spamhaus.org), [SpamCop](https://www.spamcop.net)
 - IP data: [ip-api.com](https://ip-api.com), [AbuseIPDB](https://www.abuseipdb.com), [Tor exit list](https://www.dan.me.uk/torlist/)
 - Phone data: [IPQualityScore](https://www.ipqualityscore.com) (carrier + risk, keyed), [GetContact](https://getcontact.com) (community spam reports), [Should I Answer](https://www.shouldianswer.com) (NANP community reports); Indonesian prefix data: [Wikipedia — Daftar kode telepon di Indonesia](https://id.wikipedia.org/wiki/Daftar_kode_telepon_di_Indonesia)
+- Hash reputation: [CIRCL hashlookup](https://hashlookup.circl.lu), [VirusTotal](https://www.virustotal.com), [MalwareBazaar](https://bazaar.abuse.ch), [Hybrid Analysis](https://www.hybrid-analysis.com), [AlienVault OTX](https://otx.alienvault.com)
+- URL reputation: [Google Safe Browsing](https://developers.google.com/safe-browsing), [VirusTotal](https://www.virustotal.com)
+- Wallet data: [Etherscan](https://etherscan.io) (unified v2 API, Ethereum + BNB Chain)
+- Image metadata: [exifr](https://github.com/MikeKovarik/exifr) (MIT, client-side only)

@@ -96,7 +96,10 @@ export default function RootLayout({
           <div className="wrap flex flex-col gap-3 py-8 text-[13px] text-gray-500 sm:flex-row sm:items-center sm:justify-between">
             <p>
               HymnGuard — free security exposure checks. Data sources: Have I
-              Been Pwned, crt.sh, public DNS records.
+              Been Pwned, LeakCheck, Hudson Rock, crt.sh, RDAP, Wayback
+              Machine, OTX, urlscan.io, CIRCL, VirusTotal, MalwareBazaar,
+              Hybrid Analysis, Safe Browsing, Etherscan, and public DNS
+              records.
             </p>
             <p className="font-mono text-xs">
               Anonymous checks store nothing on the server. Accounts are

@@ -58,6 +58,26 @@ const CHECK_TYPES = [
     what: "Checks whether the password appears in known data breaches, and how many times.",
     source: "HIBP Pwned Passwords · k-anonymity",
   },
+  {
+    name: "File hash",
+    what: "Reputation of an MD5, SHA-1, or SHA-256 hash across known-file, malware, and threat-intel sources. Only the hash is sent — never the file.",
+    source: "CIRCL · urlscan.io · VirusTotal · MalwareBazaar · Hybrid Analysis · OTX",
+  },
+  {
+    name: "URL",
+    what: "Whether a URL is flagged by malware/phishing lists or has been scanned publicly. The URL is only sent to reputation APIs — never fetched.",
+    source: "urlscan.io · VirusTotal · Google Safe Browsing",
+  },
+  {
+    name: "Image",
+    what: "EXIF metadata inside a photo — camera, timestamps, and GPS location when present. Analyzed in the browser; the file never leaves the device.",
+    source: "exifr (local, client-side)",
+  },
+  {
+    name: "Wallet",
+    what: "Balance, first/last activity, and transaction count for an Ethereum-style address, on Ethereum and BNB Chain. Needs an Etherscan API key.",
+    source: "Etherscan API v2",
+  },
 ];
 
 export default function Home() {
@@ -71,10 +91,11 @@ export default function Home() {
           Know where you&rsquo;re exposed.
         </h1>
         <p className="mt-4 max-w-2xl text-lg leading-relaxed text-gray-500">
-          Check a password, username, email, domain, IP address, or phone
-          number against public breach data and live records. Free, no
-          sign-up needed — and an optional account adds saved history,
-          breach monitoring, and your own API keys.
+          Check a password, username, email, domain, IP address, phone
+          number, file hash, URL, image, or crypto wallet against public
+          breach data and live records. Free, no sign-up needed — and an
+          optional account adds saved history, breach monitoring, and your
+          own API keys.
         </p>
         <div className="mt-6 flex flex-wrap gap-2">
           {["Free forever", "No sign-up needed", "Private by design"].map((badge) => (
@@ -119,7 +140,7 @@ export default function Home() {
           What each check does
         </h2>
         <p className="mt-1 max-w-2xl text-sm leading-relaxed text-gray-500">
-          Six checkers, each against the best free source for its kind. No
+          Ten checkers, each against the best free source for its kind. No
           check invents a result when its source is unavailable — it says so.
         </p>
         <div className="mt-6 overflow-hidden rounded-lg border border-gray-200">
@@ -147,7 +168,10 @@ export default function Home() {
           TypeScript. Breach data: Have I Been Pwned. Subdomains: crt.sh and
           AlienVault OTX. Registration: RDAP. History: Wayback Machine. IP
           data: ip-api.com and AbuseIPDB. Phone data: IPQualityScore,
-          GetContact, and Should I Answer.
+          GetContact, and Should I Answer. Hash and URL reputation: CIRCL,
+          urlscan.io, VirusTotal, MalwareBazaar, Hybrid Analysis, and Google
+          Safe Browsing. Wallet data: Etherscan. Image metadata: exifr,
+          entirely in the browser.
         </p>
       </section>
     </main>

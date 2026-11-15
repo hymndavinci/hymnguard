@@ -89,11 +89,48 @@ The biggest architectural step. Turns HymnGuard from a tool into a service.
 - **Verified live locally (61/61 E2E assertions against a local Postgres)** and on production for the no-DB states. The Neon-driver path is untested live until `DATABASE_URL` is set — see the deployment note below.
 - **Deployment note:** accounts need Bintang to create the Neon project and set `DATABASE_URL` (plus `SESSION_SECRET`, `ENCRYPTION_KEY`, `CRON_SECRET` — set by the agent in Vercel). Until then the app runs as before: all checkers work anonymously and sign-in reports "not configured".
 
-## Phase 6 — New identifier types
+## Phase 6 — New identifier types (DONE — live 2026-11-15)
 
-- **File hash / URL reputation** — VirusTotal (free tier), MalwareBazaar (free API), Hybrid Analysis (free tier). Easiest new type.
-- **Image** — EXIF / metadata analysis (free, client-side — easy win). Reverse image search is a research item: TinEye is paid, Google Lens has no official API.
-- **Crypto wallet** — public chain data via Etherscan / BSCScan free APIs (exposure, scam labels).
+Four new checkers, ten total. Each plugs into the `lib/checkers.ts`
+registry with one entry + one route (the image checker has no route —
+it is client-side only, so `route` is optional on the registry now).
+
+- **File hash** — MD5/SHA-1/SHA-256 reputation via CIRCL hashlookup
+  (keyless, verified live both directions: EICAR test hash returns
+  KnownMalicious, a random hash returns 404) + urlscan.io hash search
+  (keyless, verified both directions) + VirusTotal, MalwareBazaar,
+  Hybrid Analysis, OTX file pulses (all keyed, implemented from the
+  public docs, needs-key states until a key is configured). **Two brief
+  corrections:** MalwareBazaar is NOT keyless anymore — its Community
+  API has required a free Auth-Key (auth.abuse.ch) since 2025; and
+  the brief's "EICAR hash" had to be recomputed from the test string
+  (the remembered value was 63 chars and wrong). Cache TTL 24h.
+- **URL reputation** — urlscan.io page.url search (keyless, verified
+  live both directions) + VirusTotal URL report + Google Safe Browsing
+  (both keyed, from docs, needs-key states). The URL is only sent to
+  reputation APIs — HymnGuard never fetches it (no SSRF surface).
+  Cache TTL 1h.
+- **Image** — EXIF/XMP/IPTC analysis with exifr, fully client-side: the
+  file NEVER leaves the browser (no API route, no upload, no key).
+  Shows camera/device, software, timestamps, exposure, and GPS
+  coordinates when present (with a Maps link and a privacy warning).
+  Verified locally with crafted test JPEGs (GPS + device present vs
+  stripped). 20 MB cap.
+- **Crypto wallet** — Etherscan API v2 unified (one key covers Ethereum
+  + BNB Chain; the brief's "Etherscan + BSCScan (separate keys)" is
+  outdated — v1 was deprecated in August 2025). Balance, tx count,
+  first/last activity per chain. EIP-55 checksum validation
+  client- and server-side (js-sha3). Without a key the check reports
+  "needs an Etherscan API key" — never an empty result. Implemented
+  from the docs; untested live (no key). Cache TTL 1h.
+- **New BYOK providers:** virustotal, malwarebazaar, hybridanalysis,
+  safebrowsing, etherscan (11 total). Server history masking extended:
+  URLs stored with query + fragment stripped, image entries store only
+  the file name.
+- **Excluded:** reverse image search (TinEye paid, Google Lens has no
+  official API — still a research item, not built); MalwareBazaar CSV
+  export (410 Gone); token holdings / identity linking for wallets
+  (out of scope — public chain data only).
 
 ## Phase 7 — Dossier mode (opt-in, authenticated only)
 

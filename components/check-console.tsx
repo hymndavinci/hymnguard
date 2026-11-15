@@ -4,12 +4,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   DomainCheckResult,
   EmailCheckResponse,
+  HashCheckResult,
   IpCheckResult,
   PasswordCheckResponse,
   PhoneCheckResult,
+  UrlCheckResult,
   UsernameCheckResult,
   UsernameChunkResponse,
   UsernamePlanResponse,
+  WalletCheckResult,
 } from "@/lib/api-types";
 import { CHECKERS } from "@/lib/checkers";
 import {
@@ -19,14 +22,23 @@ import {
   type CheckType,
   type HistoryEntry,
 } from "@/lib/history";
+import {
+  analyzeImage,
+  type ImageExifResult,
+} from "@/lib/image-exif";
 import { sha1Hex } from "@/lib/sha1";
+import { normalizeWalletAddress } from "@/lib/wallet-address";
 import {
   DomainResult,
   EmailResult,
+  HashResult,
+  ImageResult,
   IpResult,
   PasswordResult,
   PhoneResult,
+  UrlResult,
   UsernameResult,
+  WalletResult,
 } from "./results";
 
 // Tabs come from the checker registry (lib/checkers.ts) — adding a
@@ -46,6 +58,10 @@ type CheckResultState =
   | { type: "domain"; input: string; data: DomainCheckResult; durationMs: number }
   | { type: "ip"; input: string; data: IpCheckResult; durationMs: number }
   | { type: "phone"; input: string; data: PhoneCheckResult; durationMs: number }
+  | { type: "hash"; input: string; data: HashCheckResult; durationMs: number }
+  | { type: "url"; input: string; data: UrlCheckResult; durationMs: number }
+  | { type: "image"; input: string; data: ImageExifResult; durationMs: number }
+  | { type: "wallet"; input: string; data: WalletCheckResult; durationMs: number }
   | { type: "password"; data: { count: number }; durationMs: number };
 
 const EMPTY_INPUTS: Record<CheckType, string> = {
@@ -55,6 +71,10 @@ const EMPTY_INPUTS: Record<CheckType, string> = {
   ip: "",
   phone: "",
   password: "",
+  hash: "",
+  url: "",
+  image: "",
+  wallet: "",
 };
 
 function summaryFor(result: CheckResultState): string {
@@ -113,6 +133,49 @@ function summaryFor(result: CheckResultState): string {
       return result.data.valid
         ? `Valid${result.data.country ? ` · ${result.data.country}` : ""}`
         : "Invalid number";
+    case "hash": {
+      const vt = result.data.virustotal.result;
+      if (vt?.ok && !vt.notFound && vt.malicious !== undefined) {
+        return `VirusTotal: ${vt.malicious} malicious / ${vt.harmless ?? 0} harmless`;
+      }
+      if (result.data.circl.ok && result.data.circl.knownMalicious) {
+        return "Known malicious (CIRCL)";
+      }
+      if (result.data.circl.ok && !result.data.circl.notFound) {
+        return `Known file${result.data.circl.fileName ? `: ${result.data.circl.fileName}` : ""}`;
+      }
+      return "Not found in any source";
+    }
+    case "url": {
+      const vt = result.data.virustotal.result;
+      if (vt?.ok && !vt.notFound && vt.malicious !== undefined) {
+        return `VirusTotal: ${vt.malicious} malicious`;
+      }
+      const sb = result.data.safebrowsing.result;
+      if (sb?.ok && sb.matches.length > 0) {
+        return `Flagged: ${sb.matches.map((m) => m.threatType).join(", ")}`;
+      }
+      if (result.data.urlscan.ok) {
+        return `${result.data.urlscan.total} urlscan scans (30d)`;
+      }
+      return "Checked";
+    }
+    case "image":
+      return result.data.hasExif
+        ? result.data.gps
+          ? "Metadata found — GPS location present"
+          : `Metadata found (${result.data.fields.length} fields)`
+        : "No metadata found";
+    case "wallet": {
+      const parts: string[] = [];
+      if (result.data.ethereum.ok && result.data.ethereum.balanceDisplay) {
+        parts.push(`ETH ${result.data.ethereum.balanceDisplay}`);
+      }
+      if (result.data.bsc.ok && result.data.bsc.balanceDisplay) {
+        parts.push(`BNB ${result.data.bsc.balanceDisplay}`);
+      }
+      return parts.length > 0 ? parts.join(" · ") : "Checked";
+    }
     case "password":
       return result.data.count > 0
         ? `Pwned — seen ${result.data.count.toLocaleString("en-US")} times`
@@ -141,6 +204,8 @@ export default function CheckConsole() {
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
   const loggedInRef = useRef(false);
+  const imageFileRef = useRef<File | null>(null);
+  const [imageFileName, setImageFileName] = useState<string | null>(null);
   const elapsedTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const tab = TABS.find((t) => t.id === activeTab) ?? TABS[0];
@@ -191,6 +256,35 @@ export default function CheckConsole() {
       setError(null);
       setResult(null);
       try {
+        if (type === "image") {
+          // Client-side only: the file is parsed in the browser and never
+          // leaves the device. `value` is the file name; the File itself
+          // comes from the picker ref.
+          const file = imageFileRef.current;
+          if (!file) {
+            throw new Error("Choose an image file first.");
+          }
+          const data = await analyzeImage(file);
+          const state: CheckResultState = {
+            type: "image",
+            input: file.name,
+            data,
+            durationMs: performance.now() - started,
+          };
+          setResult(state);
+          setHistory(
+            addHistoryEntry({ type, input: file.name, summary: summaryFor(state) }),
+          );
+          logToServerHistory(type, file.name, summaryFor(state));
+          return;
+        }
+
+        if (type === "wallet" && !normalizeWalletAddress(value)) {
+          throw new Error(
+            "Invalid address. Enter an Ethereum-style address (0x + 40 hex characters); mixed-case addresses must pass the EIP-55 checksum.",
+          );
+        }
+
         if (type === "password") {
           if (!window.crypto?.subtle) {
             throw new Error(
@@ -306,7 +400,10 @@ export default function CheckConsole() {
         const res = await fetch(`/api/check/${type}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ [type]: value }),
+          // The wallet route reads `address`, not `wallet`.
+          body: JSON.stringify({
+            [type === "wallet" ? "address" : type]: value,
+          }),
         });
         const json = (await res.json().catch(() => ({}))) as {
           error?: string;
@@ -339,13 +436,27 @@ export default function CheckConsole() {
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (running) return;
+    if (activeTab === "image") {
+      if (!imageFileRef.current) return;
+      void runCheck("image", imageFileRef.current.name);
+      return;
+    }
     const value = inputs[activeTab].trim();
-    if (!value || running) return;
+    if (!value) return;
     void runCheck(activeTab, value);
   }
 
+  function handleImageFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null;
+    imageFileRef.current = file;
+    setImageFileName(file ? file.name : null);
+    setError(null);
+    setResult(null);
+  }
+
   function handleRerun(entry: HistoryEntry) {
-    if (entry.type === "password" || !entry.input) return;
+    if (entry.type === "password" || entry.type === "image" || !entry.input) return;
     setActiveTab(entry.type);
     setInputs((prev) => ({ ...prev, [entry.type]: entry.input }));
     void runCheck(entry.type, entry.input);
@@ -392,12 +503,54 @@ export default function CheckConsole() {
 
         <form onSubmit={handleSubmit} className="p-4 sm:p-5">
           <label
-            htmlFor="check-input"
+            htmlFor={activeTab === "image" ? "image-file" : "check-input"}
             className="mb-2 block text-xs font-medium text-gray-700"
           >
             {tab.label}
           </label>
-          <div className="flex flex-col gap-3 sm:flex-row">
+          {activeTab === "image" ? (
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <label
+                htmlFor="image-file"
+                className="flex h-11 flex-1 cursor-pointer items-center gap-2.5 rounded-md border border-gray-300 bg-white px-3.5 text-[15px] text-gray-700 transition-colors hover:border-black"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="shrink-0 text-gray-500"
+                  aria-hidden="true"
+                >
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <circle cx="9" cy="9" r="2" />
+                  <path d="M21 15l-3.1-3.1a2 2 0 0 0-2.8 0L6 21" />
+                </svg>
+                <span className="truncate">
+                  {imageFileName ?? "Choose an image file (max 20 MB)"}
+                </span>
+              </label>
+              <input
+                id="image-file"
+                type="file"
+                accept="image/*"
+                onChange={handleImageFile}
+                className="sr-only"
+              />
+              <button
+                type="submit"
+                disabled={running || !imageFileName}
+                className="h-11 shrink-0 rounded-md bg-black px-6 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {running ? "Analyzing…" : "Analyze"}
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3 sm:flex-row">
             <div className="relative flex-1">
               <input
                 id="check-input"
@@ -440,7 +593,8 @@ export default function CheckConsole() {
             >
               {running ? "Running…" : "Run check"}
             </button>
-          </div>
+            </div>
+          )}
           <p className="mt-2.5 flex items-start gap-1.5 text-[13px] leading-relaxed text-gray-500">
             <svg
               width="14"
@@ -511,6 +665,14 @@ export default function CheckConsole() {
               <IpResult data={result.data} />
             ) : result.type === "phone" ? (
               <PhoneResult data={result.data} />
+            ) : result.type === "hash" ? (
+              <HashResult data={result.data} />
+            ) : result.type === "url" ? (
+              <UrlResult data={result.data} />
+            ) : result.type === "image" ? (
+              <ImageResult data={result.data} />
+            ) : result.type === "wallet" ? (
+              <WalletResult data={result.data} />
             ) : (
               <PasswordResult count={result.data.count} />
             )}
@@ -524,7 +686,9 @@ export default function CheckConsole() {
                 Results will appear here
               </p>
               <p className="mt-1 text-[13px] text-gray-500">
-                Enter a {tab.label.toLowerCase()} above and run the check.
+                {activeTab === "image"
+                  ? "Choose an image file above and analyze it."
+                  : `Enter a ${tab.label.toLowerCase()} above and run the check.`}
               </p>
             </div>
           </div>
@@ -604,7 +768,9 @@ export default function CheckConsole() {
                       })}
                     </td>
                     <td className="px-4 py-2.5 text-right">
-                      {entry.type !== "password" && entry.input ? (
+                      {entry.type !== "password" &&
+                      entry.type !== "image" &&
+                      entry.input ? (
                         <button
                           onClick={() => handleRerun(entry)}
                           disabled={running}

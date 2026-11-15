@@ -1,7 +1,17 @@
 // Client-side history, stored in localStorage only. Nothing is sent to the
 // server. Password checks store no input at all — only the summary.
 
-export type CheckType = "email" | "username" | "domain" | "phone" | "password" | "ip";
+export type CheckType =
+  | "email"
+  | "username"
+  | "domain"
+  | "phone"
+  | "password"
+  | "ip"
+  | "hash"
+  | "url"
+  | "image"
+  | "wallet";
 
 export interface HistoryEntry {
   id: string;
@@ -21,7 +31,7 @@ function isValidEntry(value: unknown): value is HistoryEntry {
   return (
     typeof entry.id === "string" &&
     typeof entry.type === "string" &&
-    ["email", "username", "domain", "phone", "password", "ip"].includes(entry.type) &&
+    ["email", "username", "domain", "phone", "password", "ip", "hash", "url", "image", "wallet"].includes(entry.type) &&
     typeof entry.input === "string" &&
     typeof entry.summary === "string" &&
     typeof entry.at === "number"

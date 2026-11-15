@@ -145,3 +145,47 @@ export function normalizeIp(input: unknown): string | null {
 export function isValidPasswordSuffix(input: unknown): input is string {
   return typeof input === "string" && /^[0-9a-fA-F]{35}$/.test(input);
 }
+
+export type HashAlgorithm = "md5" | "sha1" | "sha256";
+
+/** Accepts an MD5 (32), SHA-1 (40), or SHA-256 (64) hex digest.
+ * Returns the lowercase hash plus its algorithm, or null. */
+export function normalizeHash(
+  input: unknown,
+): { hash: string; algorithm: HashAlgorithm } | null {
+  if (typeof input !== "string") return null;
+  const value = input.trim().toLowerCase();
+  if (!/^[0-9a-f]+$/.test(value)) return null;
+  if (value.length === 32) return { hash: value, algorithm: "md5" };
+  if (value.length === 40) return { hash: value, algorithm: "sha1" };
+  if (value.length === 64) return { hash: value, algorithm: "sha256" };
+  return null;
+}
+
+/** Accepts an http(s) URL. Rejects localhost and private-IP hosts — the
+ * reputation sources have nothing to say about them. Returns the trimmed
+ * URL (query and fragment preserved: they are part of the URL's identity
+ * for reputation lookups), or null. */
+export function normalizeUrl(input: unknown): string | null {
+  if (typeof input !== "string") return null;
+  const value = input.trim();
+  if (!value || value.length > 2048) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return null;
+  }
+  const host = parsed.hostname.toLowerCase();
+  if (!host || host === "localhost" || host.endsWith(".localhost")) {
+    return null;
+  }
+  if (net.isIP(host)) {
+    // An IP-literal host must be public (normalizeIp rejects private ones).
+    if (!normalizeIp(host)) return null;
+  }
+  return value;
+}
