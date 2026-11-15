@@ -5,9 +5,6 @@
 // A domain counts as signed when either signal is positive. When both are
 // unavailable the result is inconclusive (signed: null), never "unsigned".
 
-import dns from "node:dns/promises";
-import { friendlyDnsError } from "./domain-check";
-
 const DNSKEY_TIMEOUT_MS = 5000;
 
 export interface DnssecResult {
@@ -20,31 +17,28 @@ export interface DnssecResult {
   error?: string;
 }
 
-function withTimeout<T>(
-  promise: Promise<T>,
-  ms: number,
-  label: string,
-): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_resolve, reject) =>
-      setTimeout(() => reject(new Error(`${label} timed out`)), ms),
-    ),
-  ]);
-}
-
 export async function lookupDnskey(domain: string): Promise<boolean | null> {
+  // Node's dns.resolve() rejects "DNSKEY" as an rrtype, so ask a
+  // DNS-over-HTTPS resolver instead (Google Public DNS JSON API).
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DNSKEY_TIMEOUT_MS);
   try {
-    const records = await withTimeout(
-      dns.resolve(domain, "DNSKEY"),
-      DNSKEY_TIMEOUT_MS,
-      "DNSKEY",
+    const res = await fetch(
+      `https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=DNSKEY`,
+      { signal: controller.signal },
     );
-    return Array.isArray(records) && records.length > 0;
-  } catch (err) {
-    // ENOTFOUND / ENODATA mean "no DNSKEY records" — the zone is unsigned.
-    if (friendlyDnsError(err) === null) return false;
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      Status?: number;
+      Answer?: unknown[];
+    };
+    if (data.Status === 3) return false; // NXDOMAIN: no DNSKEY records.
+    if (data.Status !== 0) return null;
+    return Array.isArray(data.Answer) && data.Answer.length > 0;
+  } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

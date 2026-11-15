@@ -178,13 +178,15 @@ async function resolveSpf(domain: string): Promise<SpfResult> {
 
 /** A TXT record at a `._domainkey` name is a DKIM key when it carries the
  * version tag — or, for publishers that omit it (Google's older selectors
- * do), when it carries a public key (`p=`) with a key type. */
+ * do), when it carries a public key (`p=`) with a key type. Either way the
+ * public key must be non-empty: RFC 6376 treats an empty `p=` as a revoked
+ * key (example.com publishes a wildcard `v=DKIM1; p=` record, which must
+ * not count as a real key). */
 export function isDkimRecord(record: string): boolean {
+  const hasKey = /p=\s*[A-Za-z0-9+/=]+/.test(record);
+  if (!hasKey) return false;
   if (record.includes("v=DKIM1")) return true;
-  return (
-    record.includes("p=") &&
-    (record.includes("k=rsa") || record.includes("k=ed25519"))
-  );
+  return record.includes("k=rsa") || record.includes("k=ed25519");
 }
 
 export async function checkEmailAuth(domain: string): Promise<EmailAuthResult> {
