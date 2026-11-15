@@ -3,7 +3,7 @@
 Free, universal security exposure checker. Check a password, username, email,
 domain, or phone number against public breach data and live records.
 
-**Live:** https://hymnguard.vercel.app (after first deploy)
+**Live:** https://hymnguard.vercel.app
 
 No sign-up. No database in MVP. Nothing is stored on the server — check
 history lives only in the visitor's browser (localStorage).
