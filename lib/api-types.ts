@@ -12,6 +12,20 @@ export interface PasswordCheckResponse {
   entries: PwnedRangeEntry[];
 }
 
+/** One chunk of a username check, plus the chunk plan for aggregation. */
+export interface UsernameChunkResponse extends UsernameCheckResult {
+  chunk: number;
+  chunkSize: number;
+  total: number;
+  chunks: number;
+}
+
+export interface UsernamePlanResponse {
+  total: number;
+  chunkSize: number;
+  chunks: number;
+}
+
 export interface EmailCheckResponse {
   email: string;
   domain: string;

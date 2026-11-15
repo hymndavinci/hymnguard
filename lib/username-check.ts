@@ -13,6 +13,8 @@ export interface SiteResult {
   url: string;
   status: SiteStatus;
   detail?: string;
+  /** Adult site (Sherlock's isNSFW). */
+  isNSFW?: boolean;
 }
 
 export interface UsernameCheckResult {
@@ -22,21 +24,28 @@ export interface UsernameCheckResult {
   summary: { found: number; notFound: number; errors: number };
 }
 
+/** Detail string used when a site's own username regex rejects the input. */
+export const REGEX_SKIP_DETAIL = "Username format not supported by this site";
+
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
 const DEFAULT_ACCEPT =
   "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
 
-const SITE_TIMEOUT_MS = 7000;
+const SITE_TIMEOUT_MS = 5000;
 
 // Markers for bot-challenge / interstitial pages. A 200 that serves one of
 // these is not evidence the user exists — it means the check was blocked.
+// Includes Sherlock's WAF fingerprints (Cloudflare / AWS / PerimeterX).
 const CHALLENGE_MARKERS = [
   "Checking your browser before accessing",
   "Just a moment...",
   "Attention Required! | Cloudflare",
   "Verify you are human",
+  '<span id="challenge-error-text">',
+  "AwsWafIntegration.forceRefreshToken",
+  "perimeterxIdentifiers",
 ];
 
 const BODY_READ_LIMIT_BYTES = 128 * 1024;
@@ -45,12 +54,40 @@ const BODY_READ_LIMIT_BYTES = 128 * 1024;
 const MESSAGE_BODY_LIMIT_BYTES = 1024 * 1024;
 
 function profileUrl(site: UsernameSite, username: string): string {
-  return site.urlTemplate.replace("{}", encodeURIComponent(username));
+  return site.urlTemplate.replaceAll("{}", encodeURIComponent(username));
 }
 
 function probeUrl(site: UsernameSite, username: string): string {
   const template = site.probeUrlTemplate ?? site.urlTemplate;
-  return template.replace("{}", encodeURIComponent(username));
+  return template.replaceAll("{}", encodeURIComponent(username));
+}
+
+/** Deep-substitute `{}` with the username inside a POST payload. */
+function substitutePayload(payload: unknown, username: string): unknown {
+  if (typeof payload === "string") {
+    return payload.replaceAll("{}", username);
+  }
+  if (Array.isArray(payload)) {
+    return payload.map((item) => substitutePayload(item, username));
+  }
+  if (payload !== null && typeof payload === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(payload)) {
+      out[key] = substitutePayload(value, username);
+    }
+    return out;
+  }
+  return payload;
+}
+
+/** Sherlock's `regexCheck`: the site is skipped when the username cannot exist there. */
+function usernameAllowed(site: UsernameSite, username: string): boolean {
+  if (!site.usernameRegex) return true;
+  try {
+    return new RegExp(site.usernameRegex).test(username);
+  } catch {
+    return true;
+  }
 }
 
 /** Read at most `limit` bytes of a response body (enough for markers). */
@@ -89,21 +126,46 @@ async function probeSite(
 ): Promise<SiteResult> {
   const url = profileUrl(site, username);
   const requestUrl = probeUrl(site, username);
-  const base = { id: site.id, name: site.name, url };
+  const base = {
+    id: site.id,
+    name: site.name,
+    url,
+    ...(site.isNSFW ? { isNSFW: true as const } : {}),
+  };
+
+  // Sherlock's ILLEGAL: this username cannot exist on this site, so there
+  // is nothing to probe. Reported as an error (inconclusive), never as
+  // "not found".
+  if (!usernameAllowed(site, username)) {
+    return { ...base, status: "error", detail: REGEX_SKIP_DETAIL };
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SITE_TIMEOUT_MS);
 
   try {
-    const res = await fetch(requestUrl, {
-      method: "GET",
-      headers: {
-        "User-Agent": USER_AGENT,
-        Accept: site.accept ?? DEFAULT_ACCEPT,
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-      redirect: "follow",
+    const method = site.method ?? "GET";
+    const headers: Record<string, string> = {
+      "User-Agent": USER_AGENT,
+      Accept: site.accept ?? DEFAULT_ACCEPT,
+      "Accept-Language": "en-US,en;q=0.9",
+      ...(site.headers ?? {}),
+    };
+    const init: RequestInit = {
+      method,
+      headers,
+      redirect: site.noRedirect ? "manual" : "follow",
       signal: controller.signal,
-    });
+    };
+    if (method === "POST") {
+      init.body = JSON.stringify(
+        substitutePayload(site.requestPayload ?? {}, username),
+      );
+      if (!headers["Content-Type"] && !headers["content-type"]) {
+        headers["Content-Type"] = "application/json";
+      }
+    }
+    const res = await fetch(requestUrl, init);
 
     // A block or rate limit is not evidence either way.
     if (res.status === 429 || res.status === 403 || res.status === 401) {
@@ -138,6 +200,26 @@ async function probeSite(
     }
 
     if (site.detection === "response_url") {
+      if (site.noRedirect) {
+        // Sherlock's own `response_url` semantics: redirects were disabled,
+        // so a 2xx means the profile exists and a redirect (3xx) means the
+        // site bounced the missing username elsewhere.
+        if (res.status >= 200 && res.status < 300) {
+          const text = await readBodyUpTo(res, BODY_READ_LIMIT_BYTES);
+          if (isChallengePage(text)) {
+            return {
+              ...base,
+              status: "error",
+              detail: "Blocked (bot challenge page)",
+            };
+          }
+          return { ...base, status: "found" };
+        }
+        if (res.status >= 300 && res.status < 400) {
+          return { ...base, status: "not_found" };
+        }
+        return { ...base, status: "error", detail: `HTTP ${res.status}` };
+      }
       const finalUrl = res.url.replace(/\/$/, "");
       if (
         site.errorUrlExact &&
@@ -190,20 +272,22 @@ async function probeSite(
 
 export async function checkUsername(
   username: string,
+  sitesToCheck: UsernameSite[] = USERNAME_SITES,
 ): Promise<UsernameCheckResult> {
   const settled = await Promise.allSettled(
-    USERNAME_SITES.map((site) => probeSite(site, username)),
+    sitesToCheck.map((site) => probeSite(site, username)),
   );
 
   const sites = settled.map((result, i) => {
     if (result.status === "fulfilled") return result.value;
-    const site = USERNAME_SITES[i];
+    const site = sitesToCheck[i];
     return {
       id: site.id,
       name: site.name,
       url: profileUrl(site, username),
       status: "error" as const,
       detail: "Check failed",
+      ...(site.isNSFW ? { isNSFW: true as const } : {}),
     };
   });
 

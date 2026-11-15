@@ -1,5 +1,9 @@
 // Result renderers for each check type. Pure presentational components.
+// Client component: the username result has interactive search/filter state.
 
+"use client";
+
+import { useMemo, useState } from "react";
 import type {
   DomainCheckResult,
   EmailCheckResponse,
@@ -132,15 +136,77 @@ export function PasswordResult({ count }: { count: number }) {
 
 // ---------------------------------------------------------------- username
 
-export function UsernameResult({ data }: { data: UsernameCheckResult }) {
-  const ordered = [...data.sites].sort((a, b) => {
-    const rank = (s: string) =>
-      s === "found" ? 0 : s === "not_found" ? 1 : 2;
-    return rank(a.status) - rank(b.status) || a.name.localeCompare(b.name);
-  });
+type UsernameFilter = "all" | "found" | "not_found" | "error";
+
+const FILTER_LABELS: Record<UsernameFilter, string> = {
+  all: "All",
+  found: "Found",
+  not_found: "Not found",
+  error: "Errors",
+};
+
+export function UsernameResult({
+  data,
+  progress,
+}: {
+  data: UsernameCheckResult;
+  progress?: { checked: number; total: number };
+}) {
+  const [filter, setFilter] = useState<UsernameFilter>("all");
+  const [query, setQuery] = useState("");
+
+  const ordered = useMemo(
+    () =>
+      [...data.sites].sort((a, b) => {
+        const rank = (s: string) =>
+          s === "found" ? 0 : s === "not_found" ? 1 : 2;
+        return rank(a.status) - rank(b.status) || a.name.localeCompare(b.name);
+      }),
+    [data.sites],
+  );
+
+  const counts = useMemo(
+    () => ({
+      all: ordered.length,
+      found: ordered.filter((s) => s.status === "found").length,
+      not_found: ordered.filter((s) => s.status === "not_found").length,
+      error: ordered.filter((s) => s.status === "error").length,
+    }),
+    [ordered],
+  );
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return ordered.filter((site) => {
+      if (filter !== "all" && site.status !== filter) return false;
+      if (q && !site.name.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [ordered, filter, query]);
+
+  const totalSites = progress?.total ?? data.sites.length;
 
   return (
     <div className="space-y-5">
+      {progress ? (
+        <div className="space-y-2">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-[13px] text-gray-600">
+              Checking… {progress.checked} of {progress.total} sites
+            </p>
+            <p className="font-mono text-xs text-gray-500">
+              {Math.round((progress.checked / progress.total) * 100)}%
+            </p>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
+            <div
+              className="h-full rounded-full bg-black transition-all duration-300"
+              style={{ width: `${(progress.checked / progress.total) * 100}%` }}
+            />
+          </div>
+        </div>
+      ) : null}
+
       <StatGrid
         items={[
           { label: "Accounts found", value: String(data.summary.found) },
@@ -152,14 +218,48 @@ export function UsernameResult({ data }: { data: UsernameCheckResult }) {
       <div>
         <SectionTitle>
           {data.summary.found > 0
-            ? `“${data.username}” exists on ${data.summary.found} of ${data.sites.length} checked sites`
-            : `“${data.username}” was not found on any checked site`}
+            ? `“${data.username}” exists on ${data.summary.found} of ${totalSites} checked sites`
+            : progress
+              ? `Checking “${data.username}” across ${totalSites} sites…`
+              : `“${data.username}” was not found on any checked site`}
         </SectionTitle>
         <p className="mt-1 text-[13px] text-gray-500">
           {data.summary.errors > 0
             ? `${data.summary.errors} site${data.summary.errors === 1 ? "" : "s"} could not be checked (blocked or rate-limited) — those are inconclusive, not “not found”.`
             : "Every site responded."}
         </p>
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="inline-flex max-w-full gap-1 overflow-x-auto rounded-lg bg-gray-100 p-1">
+          {(Object.keys(FILTER_LABELS) as UsernameFilter[]).map((key) => (
+            <button
+              key={key}
+              onClick={() => setFilter(key)}
+              aria-pressed={filter === key}
+              className={`whitespace-nowrap rounded-md px-3 py-1.5 text-[13px] font-medium transition-all ${
+                filter === key
+                  ? "bg-white text-black shadow-sm ring-1 ring-gray-200"
+                  : "text-gray-500 hover:text-black"
+              }`}
+            >
+              {FILTER_LABELS[key]}{" "}
+              <span className="font-mono text-xs text-gray-400">
+                {counts[key]}
+              </span>
+            </button>
+          ))}
+        </div>
+        <input
+          type="text"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search sites…"
+          aria-label="Search sites by name"
+          autoComplete="off"
+          spellCheck={false}
+          className="h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-black outline-none transition-colors placeholder:text-gray-500 focus:border-black sm:w-56"
+        />
       </div>
 
       <div className="overflow-hidden rounded-lg border border-gray-200">
@@ -178,9 +278,16 @@ export function UsernameResult({ data }: { data: UsernameCheckResult }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {ordered.map((site) => (
+            {visible.map((site) => (
               <tr key={site.id}>
-                <td className="px-4 py-2.5 font-medium">{site.name}</td>
+                <td className="px-4 py-2.5 font-medium">
+                  {site.name}
+                  {site.isNSFW ? (
+                    <span className="ml-2 rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 font-mono text-[10px] font-medium text-gray-500">
+                      18+
+                    </span>
+                  ) : null}
+                </td>
                 <td className="px-4 py-2.5">
                   {site.status === "found" ? (
                     <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-green-700">
@@ -219,9 +326,20 @@ export function UsernameResult({ data }: { data: UsernameCheckResult }) {
                 </td>
               </tr>
             ))}
+            {visible.length === 0 ? (
+              <tr>
+                <td colSpan={3} className="px-4 py-6 text-center text-[13px] text-gray-500">
+                  No sites match this filter.
+                </td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>
+      <p className="text-xs text-gray-500">
+        Showing {visible.length} of {ordered.length} checked sites.
+        {progress ? " More results are still arriving." : ""}
+      </p>
     </div>
   );
 }

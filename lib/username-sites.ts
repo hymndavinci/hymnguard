@@ -28,9 +28,39 @@ export interface UsernameSite {
   notFoundStatuses?: number[];
   /** Override the Accept header for this site (default is the HTML one). */
   accept?: string;
+  /**
+   * HTTP method for the probe (default GET). Sherlock's `request_method`.
+   * POST sites send `requestPayload` as a JSON body.
+   */
+  method?: "GET" | "HEAD" | "POST";
+  /** JSON body for POST probes. `{}` inside string values is replaced with the username. */
+  requestPayload?: unknown;
+  /** Extra headers for the probe (merged over the defaults). */
+  headers?: Record<string, string>;
+  /**
+   * When set, the username must match this regex or the site is skipped
+   * (reported as an error, never probed). Sherlock's `regexCheck`.
+   */
+  usernameRegex?: string;
+  /**
+   * For `response_url` detection: do not follow redirects; a 2xx response
+   * means the account exists, anything else means it does not. This is
+   * how Sherlock itself implements `response_url` (it disables redirects
+   * and reads the status). Without this flag, `response_url` follows
+   * redirects and compares the final URL against `errorUrlExact` /
+   * `errorUrlContains` (the hand-tuned WordPress rule).
+   */
+  noRedirect?: boolean;
+  /** Adult site (Sherlock's `isNSFW`). Shown with an 18+ badge in results. */
+  isNSFW?: boolean;
 }
 
-export const USERNAME_SITES: UsernameSite[] = [
+/**
+ * The 30 hand-verified sites from the MVP. Their rules were tuned and
+ * verified individually and always win over the ported Sherlock list on
+ * id collision — Sherlock's data supplements them, it never replaces them.
+ */
+export const CURATED_USERNAME_SITES: UsernameSite[] = [
   { id: "github", name: "GitHub", urlTemplate: "https://github.com/{}", detection: "status" },
   {
     id: "x",
@@ -162,7 +192,8 @@ export const USERNAME_SITES: UsernameSite[] = [
   },
 ];
 
-// Deliberately NOT included:
+// Curated-site exclusions (see lib/username-sites-sherlock.ts for the
+// ported-list exclusions, which are documented per site there):
 // - Instagram: the profile page returns the same login wall (200) for real
 //   and missing accounts, and the imginn mirror Sherlock probes returns 403.
 //   No reliable free probe exists.
@@ -171,3 +202,21 @@ export const USERNAME_SITES: UsernameSite[] = [
 // - Reddit: profile pages are login-walled for unauthenticated requests,
 //   and the JSON APIs (about.json, api.reddit.com) return 403. No reliable
 //   free probe exists.
+
+import { SHERLOCK_USERNAME_SITES } from "./username-sites-sherlock";
+
+/**
+ * The full site list: the 30 hand-tuned curated sites first, then the
+ * verified Sherlock-ported sites. On id collision the curated rule wins
+ * (the converter already skips those, so this is a safety net).
+ */
+export const USERNAME_SITES: UsernameSite[] = (() => {
+  const seen = new Set<string>();
+  const merged: UsernameSite[] = [];
+  for (const site of [...CURATED_USERNAME_SITES, ...SHERLOCK_USERNAME_SITES]) {
+    if (seen.has(site.id)) continue;
+    seen.add(site.id);
+    merged.push(site);
+  }
+  return merged;
+})();

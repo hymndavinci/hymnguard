@@ -7,6 +7,8 @@ import type {
   PasswordCheckResponse,
   PhoneCheckResult,
   UsernameCheckResult,
+  UsernameChunkResponse,
+  UsernamePlanResponse,
 } from "@/lib/api-types";
 import {
   addHistoryEntry,
@@ -44,7 +46,7 @@ const TABS: TabConfig[] = [
     id: "username",
     label: "Username",
     placeholder: "username",
-    hint: "Probed across 30 popular sites.",
+    hint: "Probed across 259 sites, in chunks — results stream in as each chunk finishes.",
     privacy: "Checked and discarded — never stored.",
   },
   {
@@ -72,7 +74,14 @@ const TABS: TabConfig[] = [
 
 type CheckResultState =
   | { type: "email"; input: string; data: EmailCheckResponse; durationMs: number }
-  | { type: "username"; input: string; data: UsernameCheckResult; durationMs: number }
+  | {
+      type: "username";
+      input: string;
+      data: UsernameCheckResult;
+      durationMs: number;
+      /** Present while chunks are still arriving. */
+      progress?: { checked: number; total: number };
+    }
   | { type: "domain"; input: string; data: DomainCheckResult; durationMs: number }
   | { type: "phone"; input: string; data: PhoneCheckResult; durationMs: number }
   | { type: "password"; data: { count: number }; durationMs: number };
@@ -192,6 +201,82 @@ export default function CheckConsole() {
           setResult(state);
           setHistory(
             addHistoryEntry({ type, input: "", summary: summaryFor(state) }),
+          );
+          return;
+        }
+
+        if (type === "username") {
+          // Chunked check: fetch the plan, then POST one chunk at a time
+          // (up to 4 in flight) and stream partial results into the UI.
+          const planRes = await fetch("/api/check/username");
+          const plan = (await planRes.json().catch(() => ({}))) as Partial<UsernamePlanResponse>;
+          if (!planRes.ok || !plan.total || !plan.chunks) {
+            throw new Error("Could not start the username check.");
+          }
+          const total = plan.total;
+          const chunkCount = plan.chunks;
+          const accumulated: UsernameCheckResult["sites"] = [];
+          const pushPartial = () => {
+            const data: UsernameCheckResult = {
+              username: value,
+              checkedAt: new Date().toISOString(),
+              sites: [...accumulated],
+              summary: {
+                found: accumulated.filter((s) => s.status === "found").length,
+                notFound: accumulated.filter((s) => s.status === "not_found").length,
+                errors: accumulated.filter((s) => s.status === "error").length,
+              },
+            };
+            setResult({
+              type: "username",
+              input: value,
+              data,
+              durationMs: performance.now() - started,
+              progress: { checked: accumulated.length, total },
+            });
+          };
+          const fetchChunk = async (chunk: number) => {
+            const res = await fetch("/api/check/username", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ username: value, chunk }),
+            });
+            const json = (await res.json().catch(() => ({}))) as {
+              error?: string;
+            } & Partial<UsernameChunkResponse>;
+            if (!res.ok || !json.sites) {
+              throw new Error(json.error ?? "The username check failed.");
+            }
+            accumulated.push(...json.sites);
+            pushPartial();
+          };
+          const queue = Array.from({ length: chunkCount }, (_, i) => i);
+          const workers = Array.from({ length: Math.min(4, queue.length) }, async () => {
+            while (queue.length > 0) {
+              const chunk = queue.shift();
+              if (chunk === undefined) return;
+              await fetchChunk(chunk);
+            }
+          });
+          await Promise.all(workers);
+          const finalState: CheckResultState = {
+            type: "username",
+            input: value,
+            data: {
+              username: value,
+              checkedAt: new Date().toISOString(),
+              sites: [...accumulated],
+              summary: {
+                found: accumulated.filter((s) => s.status === "found").length,
+                notFound: accumulated.filter((s) => s.status === "not_found").length,
+                errors: accumulated.filter((s) => s.status === "error").length,
+              },
+            },
+            durationMs: performance.now() - started,
+          };
+          setResult(finalState);
+          setHistory(
+            addHistoryEntry({ type, input: value, summary: summaryFor(finalState) }),
           );
           return;
         }
@@ -388,13 +473,15 @@ export default function CheckConsole() {
                 )}
               </h2>
               <p className="font-mono text-xs text-gray-500">
-                Completed in {(result.durationMs / 1000).toFixed(1)}s
+                {result.type === "username" && result.progress
+                  ? `Checking… ${result.progress.checked} of ${result.progress.total} sites`
+                  : `Completed in ${(result.durationMs / 1000).toFixed(1)}s`}
               </p>
             </div>
             {result.type === "email" ? (
               <EmailResult data={result.data} />
             ) : result.type === "username" ? (
-              <UsernameResult data={result.data} />
+              <UsernameResult data={result.data} progress={result.progress} />
             ) : result.type === "domain" ? (
               <DomainResult data={result.data} />
             ) : result.type === "phone" ? (
