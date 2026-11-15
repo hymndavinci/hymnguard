@@ -17,8 +17,8 @@
 //     rendered with an 18+ badge; enumeration is gated behind ownership
 //     verification, so users only ever see their own data.
 //
-// Detection rules are adapted from Holehe (MIT, see THIRD-PARTY-NOTICES.md)
-// and verified live before shipping: every kept probe returned not_exists
+// Detection rules are adapted from Holehe (GPL-3.0, see
+// THIRD-PARTY-NOTICES.md) and verified live before shipping: every kept probe returned not_exists
 // for a known-nonexistent control email AND exists for at least one real
 // account (verified 2026-11-15 from the Vercel network, control +
 // 4 positive test emails). 69 of 76 candidates were excluded — endpoints

@@ -33,3 +33,20 @@ SOFTWARE.
 ```
 
 Source: https://github.com/sherlock-project/sherlock
+
+## megadose/holehe
+
+The account-enumeration detection rules in `lib/email-enumeration.ts`
+(endpoint URLs, request shapes, and response markers for signup /
+availability checks) were adapted from Holehe's published module
+behaviour. The detection code itself is HymnGuard's own TypeScript
+implementation; no Holehe code is used. Holehe is licensed under the
+GNU General Public License v3.0:
+
+```
+Holehe — Copyright (c) megadose
+Licensed under the GNU General Public License v3.0.
+Full license text: https://www.gnu.org/licenses/gpl-3.0.html
+```
+
+Source: https://github.com/megadose/holehe

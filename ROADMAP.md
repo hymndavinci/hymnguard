@@ -30,13 +30,14 @@ No auth, no database. History in localStorage (max 20). Rate limit 10/min/IP per
 
 Phases run sequentially, each verified and deployed before the next starts. Current order (Bintang, 2026-11-15): Phase 1 → Phase 3 (email) → Phase 2 (domain & IP) → Phase 4 → Phase 5 → Phase 6 → Phase 7. Email was pulled ahead of domain/IP at Bintang's direction ("email dlu").
 
-## Phase 1 — Username: full coverage (IN PROGRESS)
+## Phase 1 — Username: full coverage (DONE — live 2026-11-15)
 
 - Port Sherlock's full site list (`data.json`, 400+ sites) into `lib/username-sites.ts`.
 - Live-verify every detection rule with a known-existing username and a known-nonexistent control username. Exclude anything unreliable (documented, same precedent as Instagram / Spotify / Reddit).
 - Evaluate merging unique sites from Blackbird (600+), WhatsMyName, and Maigret — same verification bar, no exceptions.
 - UI: found-first ordering, filter by status, search by site name.
 - **Done when:** control username yields 0 false positives; full sweep completes in reasonable time.
+- **Outcome:** 256 sites live (30 curated + 226 Sherlock-verified of 451 candidates; 225 excluded — 35 false positives, 26 unverified rules, 164 blocked/unreachable from the verification network). Control username probes 0 found on production.
 
 ## Phase 2 — Domain & IP expansion (NEXT — mostly free)
 
@@ -55,7 +56,7 @@ New identifier: **IP address**
 - VPN / proxy / Tor / bot detection (free tiers).
 - No active port scanning of arbitrary IPs — passive data only (Shodan / Censys summaries only via user-provided key, see Phase 5).
 
-## Phase 3 — Email expansion
+## Phase 3 — Email expansion (DONE — live 2026-11-15)
 
 - **Holehe-style account enumeration** — check whether the email is registered on popular sites via their forgot-password flows. **Gated:** only after ownership verification (code sent to the email) + strict rate limits. No bulk checks, ever.
 - **Breach sources beyond HIBP** — LeakCheck, CheckLeaked, OsintCat (free tiers). Label each source's confidence; HIBP remains the gold standard.
@@ -63,6 +64,7 @@ New identifier: **IP address**
 - **GitHub exposure** — search public commits for the email address (Gitrecon-style; needs a GitHub token server-side or via BYOK).
 - **Deep verification** — Reacher-style SMTP checks. Optional and heavily rate-limited (SMTP probing can look like spam); skip if it proves abusive.
 - Shared with Phase 2: SPF / DKIM / DMARC grading for the email's domain.
+- **Outcome:** enumeration pruned to 7 verified probes (Adobe, Gravatar, Replit, Spotify, X, WordPress.com, XVideos) of 76 candidates — 69 excluded (endpoints changed, bot-blocked, no signal, or no positive confirmation; see README). Breach sources live: LeakCheck + Hudson Rock (free, verified), HIBP + OsintCat + GitHub exposure (keyed, needs-key states until keys are set). CheckLeaked excluded (paid-only, redundant); SMTP deep verification skipped (outbound SMTP blocked on Vercel). Ownership verification needs `RESEND_API_KEY` + `RESEND_FROM` (verified domain) + `VERIFY_SECRET` — until those are set, enumeration reports needs-key and never runs.
 
 ## Phase 4 — Phone expansion (limited by free sources)
 
