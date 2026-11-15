@@ -14,7 +14,8 @@ history lives only in the visitor's browser (localStorage).
 | --- | --- | --- |
 | **Password** | Have I Been Pwned — Pwned Passwords (free, no key) | k-anonymity: the password is SHA-1 hashed in the browser; only the first 5 hex chars of the hash are sent. The password and full hash never reach the server. |
 | **Username** | Live HTTP probing, Sherlock-style (free) | 256 sites — 30 hand-verified plus 226 verified live from the Sherlock site list (each kept site was confirmed with a known-existing username and a known-nonexistent control username, on both the verification network and production; 225 candidates were excluded — 35 false positives, 26 unverified rules, 164 blocked/unreachable from the verification network). Detection by status code, "not found" body markers, or final URL. Blocks/rate limits are reported as errors, never as "not found". Instagram, Spotify, and Reddit are excluded — no reliable free probe exists for them (login walls / JS shells that return the same page for real and missing accounts). |
-| **Domain** | Node DNS + TLS + HTTPS + crt.sh (free, no key) | DNS records (A/AAAA/MX/TXT/NS), TLS certificate (issuer, expiry, chain validity), security-header grade, passive subdomains from certificate transparency logs. |
+| **Domain** | Node DNS + TLS + HTTPS + crt.sh + RDAP + Wayback + urlscan.io + Spamhaus/SpamCop DNSBL + OTX (free, no key except OTX) | DNS records (A/AAAA/MX/TXT/NS), TLS certificate (issuer, expiry, chain validity), security-header grade, passive subdomains from certificate transparency logs, RDAP registration (registrar, created/expires, nameservers), SPF/DKIM/DMARC grading (A–F, shared with the email checker), DNSSEC status (DS record + DNSKEY), blocklist status (Spamhaus ZEN/DBL, SpamCop), tech fingerprinting from headers + homepage HTML, Wayback Machine first snapshot + snapshot count, OTX passive DNS hostnames (needs `OTX_API_KEY`), and urlscan.io public-scan activity (last 30 days; verdicts need a urlscan login, so only activity is reported). |
+| **IP** | ip-api.com + AbuseIPDB + Tor exit list (free; AbuseIPDB needs a free key) | Geolocation (country/city/region, approximate), ASN + ISP + organization, reverse DNS, VPN/proxy/hosting/mobile flags (ip-api.com), Tor exit-node status (dan.me.uk exit list), and AbuseIPDB reputation (abuse confidence score, report count, last reported — needs `ABUSEIPDB_API_KEY`). Public IPs only; private/loopback/reserved ranges are rejected. |
 | **Phone** | libphonenumber-js (free, offline) | Format, country, calling code, type, validity. Honest scope: no breach lookup — no free, legitimate source exists for that. |
 | **Email** | DNS MX + email-auth grading + breach sources + GitHub exposure + account enumeration | MX records, disposable-domain note, and SPF/DKIM/DMARC grading (A–F) always run. Breach metadata from HIBP (paid key), LeakCheck (free, no key), OsintCat (keyed), and Hudson Rock infostealer records (free, no key) — metadata only, never breach contents. GitHub exposure searches public commits for the email (needs `GITHUB_TOKEN`). Account enumeration checks 7 verified sites (see below) and only runs after ownership verification. Any source without its key shows a clear "not configured" state instead of a fake result. |
 
@@ -96,6 +97,8 @@ SMTP is blocked on Vercel, so it cannot be verified there).
 | `HIBP_API_KEY` | No | Have I Been Pwned API key for the email breach lookup. Paid, from $4/mo at https://haveibeenpwned.com/API/Key. Without it, email checks still run MX + disposable checks and show a "not configured" state for breaches. |
 | `OSINTCAT_API_KEY` | No | OsintCat API key for the OsintCat breach lookup. Get one at https://www.osintcat.net. Without it, that source shows a "not configured" state. (Implemented from the public docs; not yet tested live — no key has been available.) |
 | `GITHUB_TOKEN` | No | GitHub personal access token (no scopes needed) for the GitHub exposure check. Without it, that source shows a "not configured" state. |
+| `OTX_API_KEY` | No | AlienVault OTX API key for the OTX passive DNS source in the domain checker. Free tier at https://otx.alienvault.com (sign up, then copy the key from your profile page). Without it, that source shows a "not configured" state. (Implemented from the public docs; not yet tested live — no key has been available.) |
+| `ABUSEIPDB_API_KEY` | No | AbuseIPDB API key for the IP reputation check. Free tier (1,000 checks/day) at https://www.abuseipdb.com (sign up, then create a key under API). Without it, IP checks still run geolocation + network signals and show a "not configured" state for reputation. (Implemented from the public docs; not yet tested live — no key has been available.) |
 | `VERIFY_SECRET` | No* | Random secret for signing ownership-verification tokens. Required together with `RESEND_API_KEY` to enable account enumeration. Generate with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`. |
 | `RESEND_API_KEY` | No* | Resend API key for sending ownership-verification codes. Get one at https://resend.com (free tier available). Required together with `VERIFY_SECRET` to enable account enumeration. |
 | `RESEND_FROM` | No* | Sender address for verification codes. Resend's free tier only sends from `onboarding@resend.dev` to the account owner's own address — to send codes to arbitrary emails, verify a domain you own in Resend and set this to an address on it (e.g. `noreply@yourdomain.com`). |
@@ -125,7 +128,7 @@ Variables → `HIBP_API_KEY`, then redeploy.
 - Next.js 16 (App Router) + TypeScript + Tailwind CSS 4
 - Geist Sans / Geist Mono
 - All checks run server-side in Next.js API routes (`app/api/check/*`)
-- No database, no auth in MVP (phase 2: accounts, saved history, breach
+- No database, no auth in MVP (phase 5: accounts, saved history, breach
   monitoring alerts)
 
 ## Attribution
@@ -134,4 +137,9 @@ Variables → `HIBP_API_KEY`, then redeploy.
 - Email enumeration approach: [megadose/holehe](https://github.com/megadose/holehe) (rules adapted; re-implemented in TypeScript; no Holehe code is used)
 - Breach data: [Have I Been Pwned](https://haveibeenpwned.com), [LeakCheck](https://leakcheck.io) (public API; attribution link shown in the UI), [OsintCat](https://www.osintcat.net)
 - Infostealer data: [Hudson Rock](https://hudsonrock.com) (Cavalier free API)
-- Subdomains: [crt.sh](https://crt.sh)
+- Subdomains: [crt.sh](https://crt.sh), [AlienVault OTX](https://otx.alienvault.com)
+- Registration: [RDAP](https://rdap.org)
+- History: [Wayback Machine](https://web.archive.org)
+- Scan activity: [urlscan.io](https://urlscan.io)
+- Blocklists: [Spamhaus](https://www.spamhaus.org), [SpamCop](https://www.spamcop.net)
+- IP data: [ip-api.com](https://ip-api.com), [AbuseIPDB](https://www.abuseipdb.com), [Tor exit list](https://www.dan.me.uk/torlist/)

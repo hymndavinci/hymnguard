@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import type {
   DomainCheckResult,
   EmailCheckResponse,
+  IpCheckResult,
   PhoneCheckResult,
   UsernameCheckResult,
 } from "@/lib/api-types";
@@ -14,6 +15,17 @@ import EmailEnumeration from "./email-enumeration";
 
 function formatNumber(value: number): string {
   return value.toLocaleString("en-US");
+}
+
+function formatDate(iso?: string): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 function CheckIcon() {
@@ -552,6 +564,609 @@ export function DomainResult({ data }: { data: DomainCheckResult }) {
           </Verdict>
         )}
       </div>
+
+      <div className="space-y-3 border-t border-gray-100 pt-6">
+        <SectionTitle>Registration</SectionTitle>
+        {!data.rdap.ok ? (
+          <Verdict tone="warning" title="Registration lookup failed">
+            <p>{data.rdap.error}</p>
+          </Verdict>
+        ) : data.rdap.registered === false ? (
+          <Verdict tone="info" title="Domain is not registered">
+            <p>
+              No RDAP record exists for this domain — it appears to be
+              available for registration.
+            </p>
+          </Verdict>
+        ) : (
+          <>
+            <StatGrid
+              items={[
+                {
+                  label: "Registrar",
+                  value:
+                    data.rdap.registrar ?? data.rdap.registrarUrl ?? "—",
+                },
+                { label: "Registered", value: formatDate(data.rdap.createdAt) },
+                { label: "Expires", value: formatDate(data.rdap.expiresAt) },
+                {
+                  label: "Last changed",
+                  value: formatDate(data.rdap.updatedAt),
+                },
+                {
+                  label: "IANA registrar ID",
+                  value: data.rdap.registrarIanaId ?? "—",
+                },
+                {
+                  label: "Nameservers",
+                  value: data.rdap.nameservers?.length
+                    ? String(data.rdap.nameservers.length)
+                    : "—",
+                },
+              ]}
+            />
+            {data.rdap.nameservers && data.rdap.nameservers.length > 0 ? (
+              <p className="break-all font-mono text-xs leading-relaxed text-gray-500">
+                {data.rdap.nameservers.join(", ")}
+              </p>
+            ) : null}
+            <p className="text-xs text-gray-500">Source: RDAP (rdap.org).</p>
+          </>
+        )}
+      </div>
+
+      <div className="space-y-3 border-t border-gray-100 pt-6">
+        <SectionTitle>Email authentication</SectionTitle>
+        {data.emailAuth.error ? (
+          <Verdict
+            tone="warning"
+            title="Authentication records could not be checked"
+          >
+            <p>{data.emailAuth.error}</p>
+          </Verdict>
+        ) : (
+          <>
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 font-mono text-xl font-semibold">
+                {data.emailAuth.grade}
+              </div>
+              <div>
+                <p className="text-sm font-medium">
+                  {data.emailAuth.score} / 100
+                </p>
+                <p className="text-[13px] text-gray-500">
+                  {data.emailAuth.grade === "A" || data.emailAuth.grade === "B"
+                    ? "This domain is well protected against email spoofing."
+                    : "This domain can be spoofed more easily — senders should publish SPF, DKIM, and DMARC."}
+                </p>
+              </div>
+            </div>
+            <div className="overflow-hidden rounded-lg border border-gray-200">
+              <table className="w-full text-sm">
+                <tbody className="divide-y divide-gray-100">
+                  <AuthRow
+                    name="SPF"
+                    present={data.emailAuth.spf.present}
+                    detail={
+                      data.emailAuth.spf.policy === "hardfail"
+                        ? "-all (strict)"
+                        : data.emailAuth.spf.policy === "softfail"
+                          ? "~all (soft)"
+                          : data.emailAuth.spf.policy === "neutral"
+                            ? "?all (neutral)"
+                            : data.emailAuth.spf.policy === "pass"
+                              ? "+all (weak)"
+                              : "present"
+                    }
+                    hint="Authorizes which servers may send mail for this domain"
+                  />
+                  <AuthRow
+                    name="DKIM"
+                    present={data.emailAuth.dkim.present}
+                    detail={
+                      data.emailAuth.dkim.selectors.length > 0
+                        ? data.emailAuth.dkim.selectors.join(", ")
+                        : "present"
+                    }
+                    hint="Cryptographic signature proving the mail is genuine"
+                  />
+                  <AuthRow
+                    name="DMARC"
+                    present={data.emailAuth.dmarc.present}
+                    detail={
+                      data.emailAuth.dmarc.policy
+                        ? `p=${data.emailAuth.dmarc.policy}`
+                        : "present"
+                    }
+                    hint="Tells receivers what to do with mail that fails SPF/DKIM"
+                  />
+                </tbody>
+              </table>
+            </div>
+            {data.emailAuth.spf.redirect ? (
+              <p className="text-xs text-gray-500">
+                SPF policy resolved via redirect to{" "}
+                <span className="font-mono">{data.emailAuth.spf.redirect}</span>
+                .
+              </p>
+            ) : null}
+          </>
+        )}
+      </div>
+
+      <div className="space-y-3 border-t border-gray-100 pt-6">
+        <SectionTitle>DNSSEC</SectionTitle>
+        {data.dnssec.signed === true ? (
+          <Verdict tone="ok" title="DNSSEC is enabled">
+            <p>
+              DNS responses for this domain are cryptographically signed, so
+              resolvers can verify they have not been tampered with.
+            </p>
+          </Verdict>
+        ) : data.dnssec.signed === false ? (
+          <Verdict tone="warning" title="DNSSEC is not enabled">
+            <p>
+              Nothing signs this domain&apos;s DNS responses, so a network
+              attacker could more easily forge them. This is common — most
+              domains are still unsigned.
+            </p>
+          </Verdict>
+        ) : (
+          <Verdict tone="info" title="DNSSEC status could not be determined">
+            <p>
+              {data.dnssec.error ?? "The DNSSEC lookups failed."}
+            </p>
+          </Verdict>
+        )}
+        <div className="overflow-hidden rounded-lg border border-gray-200">
+          <table className="w-full text-sm">
+            <tbody className="divide-y divide-gray-100">
+              <tr>
+                <td className="px-4 py-2.5 font-mono text-[13px] font-medium">
+                  DS record at parent
+                </td>
+                <td className="hidden px-4 py-2.5 text-[13px] text-gray-500 sm:table-cell">
+                  Anchors the chain of trust (from RDAP)
+                </td>
+                <td className="px-4 py-2.5 text-right text-[13px]">
+                  {data.dnssec.delegationSigned === true
+                    ? "Published"
+                    : data.dnssec.delegationSigned === false
+                      ? "Not published"
+                      : "Unknown"}
+                </td>
+              </tr>
+              <tr>
+                <td className="px-4 py-2.5 font-mono text-[13px] font-medium">
+                  DNSKEY records
+                </td>
+                <td className="hidden px-4 py-2.5 text-[13px] text-gray-500 sm:table-cell">
+                  Signing keys published at the domain
+                </td>
+                <td className="px-4 py-2.5 text-right text-[13px]">
+                  {data.dnssec.dnskeyPresent === true
+                    ? "Published"
+                    : data.dnssec.dnskeyPresent === false
+                      ? "Not published"
+                      : "Unknown"}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="space-y-3 border-t border-gray-100 pt-6">
+        <SectionTitle>Blocklists</SectionTitle>
+        <div className="overflow-hidden rounded-lg border border-gray-200">
+          <table className="w-full text-sm">
+            <tbody className="divide-y divide-gray-100">
+              {data.dnsbl.lists.map((list) => (
+                <tr key={list.name}>
+                  <td className="px-4 py-2.5 font-medium">{list.name}</td>
+                  <td className="hidden px-4 py-2.5 text-[13px] text-gray-500 sm:table-cell">
+                    {list.scope}
+                  </td>
+                  <td className="px-4 py-2.5 text-right">
+                    {list.listed === true ? (
+                      <span className="inline-flex items-center gap-1.5 text-red-700">
+                        <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                        Listed
+                        {list.listedOn.length > 0
+                          ? ` (${list.listedOn.join(", ")})`
+                          : ""}
+                      </span>
+                    ) : list.listed === false ? (
+                      <span className="inline-flex items-center gap-1.5 text-green-700">
+                        <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                        Not listed
+                      </span>
+                    ) : (
+                      <span
+                        className="inline-flex items-center gap-1.5 text-amber-700"
+                        title={list.error ?? "Check failed"}
+                      >
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                        Could not check
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-xs leading-relaxed text-gray-500">
+          A listing means the domain or its IPs appear on a spam/malware
+          blocklist — mail from it is more likely to be filtered. Sources:
+          Spamhaus, SpamCop.
+        </p>
+      </div>
+
+      <div className="space-y-3 border-t border-gray-100 pt-6">
+        <SectionTitle>Technology</SectionTitle>
+        {!data.tech.ok ? (
+          <Verdict tone="warning" title="Technology detection failed">
+            <p>{data.tech.error}</p>
+          </Verdict>
+        ) : data.tech.technologies.length === 0 ? (
+          <p className="text-sm text-gray-500">
+            No recognizable technologies detected on the homepage.
+          </p>
+        ) : (
+          <div className="overflow-hidden rounded-lg border border-gray-200">
+            <table className="w-full text-sm">
+              <tbody className="divide-y divide-gray-100">
+                {data.tech.technologies.map((tech) => (
+                  <tr key={tech.name}>
+                    <td className="px-4 py-2.5 font-medium">{tech.name}</td>
+                    <td className="px-4 py-2.5 text-[13px] text-gray-500">
+                      {tech.category}
+                    </td>
+                    <td className="hidden max-w-[280px] truncate px-4 py-2.5 text-right font-mono text-xs text-gray-500 sm:table-cell">
+                      {tech.evidence}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-3 border-t border-gray-100 pt-6">
+        <SectionTitle>Wayback Machine history</SectionTitle>
+        {!data.wayback.ok ? (
+          <Verdict tone="warning" title="Archive lookup failed">
+            <p>{data.wayback.error}</p>
+          </Verdict>
+        ) : !data.wayback.firstSnapshotAt ? (
+          <p className="text-sm text-gray-500">
+            No snapshots of this domain in the Internet Archive.
+          </p>
+        ) : (
+          <>
+            <StatGrid
+              items={[
+                {
+                  label: "First snapshot",
+                  value: formatDate(data.wayback.firstSnapshotAt),
+                },
+                {
+                  label: "Snapshots",
+                  value:
+                    data.wayback.totalSnapshots !== undefined
+                      ? `${data.wayback.totalApproximate ? "≈" : ""}${formatNumber(data.wayback.totalSnapshots)}`
+                      : "—",
+                },
+                {
+                  label: "First status",
+                  value:
+                    data.wayback.firstSnapshotStatus !== undefined
+                      ? `HTTP ${data.wayback.firstSnapshotStatus}`
+                      : "—",
+                },
+              ]}
+            />
+            <p className="text-xs text-gray-500">
+              Source: Internet Archive Wayback Machine (CDX API).
+              {data.wayback.totalApproximate
+                ? " Snapshot count is approximate."
+                : ""}
+            </p>
+          </>
+        )}
+      </div>
+
+      <div className="space-y-3 border-t border-gray-100 pt-6">
+        <SectionTitle>
+          Passive DNS
+          <span className="ml-2 font-mono text-xs font-normal text-gray-500">
+            {data.otx.available && data.otx.result?.ok
+              ? `${formatNumber(data.otx.result.total)} hostnames`
+              : ""}
+          </span>
+        </SectionTitle>
+        {!data.otx.available ? (
+          <Verdict
+            tone="info"
+            title="Passive DNS lookup is not configured on this deployment"
+          >
+            <p>
+              AlienVault OTX passive DNS needs an API key (OTX_API_KEY, free
+              tier). No key is configured, so no result is shown.
+            </p>
+          </Verdict>
+        ) : data.otx.result?.ok ? (
+          data.otx.result.total > 0 ? (
+            <>
+              <div className="grid grid-cols-1 gap-x-6 gap-y-1 rounded-lg border border-gray-200 p-4 font-mono text-[13px] sm:grid-cols-2">
+                {data.otx.result.hostnames.map((name) => (
+                  <span key={name} className="truncate" title={name}>
+                    {name}
+                  </span>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500">
+                {data.otx.result.truncated
+                  ? `Showing the first ${data.otx.result.hostnames.length} of ${formatNumber(data.otx.result.total)} hostnames. `
+                  : ""}
+                Source: AlienVault OTX.
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-gray-500">
+              No hostnames in OTX passive DNS for this domain.
+            </p>
+          )
+        ) : (
+          <Verdict tone="warning" title="Passive DNS lookup failed">
+            <p>{data.otx.result?.error}</p>
+          </Verdict>
+        )}
+      </div>
+
+      <div className="space-y-3 border-t border-gray-100 pt-6">
+        <SectionTitle>Recent scans (urlscan.io)</SectionTitle>
+        {!data.urlscan.ok ? (
+          <Verdict tone="warning" title="urlscan.io lookup failed">
+            <p>{data.urlscan.error}</p>
+          </Verdict>
+        ) : data.urlscan.total === 0 ? (
+          <p className="text-sm text-gray-500">
+            No public urlscan.io scans submitted for this domain in the last
+            30 days.
+          </p>
+        ) : (
+          <>
+            <p className="text-sm text-gray-700">
+              <span className="font-mono font-semibold">
+                {data.urlscan.totalCapped
+                  ? `${formatNumber(data.urlscan.total)}+`
+                  : formatNumber(data.urlscan.total)}
+              </span>{" "}
+              public scan{data.urlscan.total === 1 ? "" : "s"} submitted in
+              the last 30 days
+              {data.urlscan.latestScanAt
+                ? `, latest on ${formatDate(data.urlscan.latestScanAt)}`
+                : ""}
+              {data.urlscan.totalCapped
+                ? " (urlscan.io caps the count at 10,000)"
+                : ""}
+              .
+            </p>
+            <p className="text-xs text-gray-500">
+              {data.urlscan.latestScanUrl ? (
+                <>
+                  <a
+                    href={data.urlscan.latestScanUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium text-gray-700 underline-offset-2 hover:text-black hover:underline"
+                  >
+                    Latest scan
+                  </a>{" "}
+                  ·{" "}
+                </>
+              ) : null}
+              <a
+                href={data.urlscan.searchUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium text-gray-700 underline-offset-2 hover:text-black hover:underline"
+              >
+                All scans on urlscan.io
+              </a>
+            </p>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------- ip
+
+function SignalRow({
+  name,
+  value,
+  hint,
+}: {
+  name: string;
+  value: boolean | null | undefined;
+  hint: string;
+}) {
+  return (
+    <tr>
+      <td className="px-4 py-2.5 font-medium">{name}</td>
+      <td className="hidden px-4 py-2.5 text-[13px] text-gray-500 sm:table-cell">
+        {hint}
+      </td>
+      <td className="px-4 py-2.5 text-right text-[13px]">
+        {value === true ? (
+          <span className="text-amber-700">Yes</span>
+        ) : value === false ? (
+          <span className="text-gray-700">No</span>
+        ) : (
+          <span className="text-gray-500">Unknown</span>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+export function IpResult({ data }: { data: IpCheckResult }) {
+  const abuse = data.abuseipdb.result;
+  const score =
+    abuse?.ok && typeof abuse.abuseConfidenceScore === "number"
+      ? abuse.abuseConfidenceScore
+      : undefined;
+  const reports = abuse?.ok ? abuse.totalReports : undefined;
+
+  const verdictTone: Tone =
+    score !== undefined && score >= 50
+      ? "danger"
+      : score !== undefined && score > 0
+        ? "warning"
+        : "ok";
+  const verdictTitle =
+    score === undefined
+      ? data.abuseipdb.available
+        ? "Reputation could not be checked"
+        : "No reputation data on this deployment"
+      : score === 0 && (reports ?? 0) === 0
+        ? "No abuse reports for this IP"
+        : score < 50
+          ? `Low abuse confidence (${score}%)`
+          : `High abuse confidence (${score}%)`;
+
+  return (
+    <div className="space-y-6">
+      <Verdict tone={verdictTone} title={verdictTitle}>
+        <p>
+          {score === undefined ? (
+            data.abuseipdb.available ? (
+              abuse?.error ?? "The AbuseIPDB lookup failed."
+            ) : (
+              "AbuseIPDB reputation needs an API key (ABUSEIPDB_API_KEY, free tier). No key is configured, so no reputation result is shown."
+            )
+          ) : score === 0 && (reports ?? 0) === 0 ? (
+            "AbuseIPDB has no abuse reports for this address in the last 90 days."
+          ) : (
+            <>
+              AbuseIPDB reports {reports ?? "?"} report
+              {reports === 1 ? "" : "s"} in the last 90 days
+              {abuse?.lastReportedAt
+                ? `, most recently on ${formatDate(abuse.lastReportedAt)}`
+                : ""}
+              .
+            </>
+          )}
+        </p>
+        {data.tor.isExitNode ? (
+          <p className="mt-1.5">
+            This IP is a Tor exit node. Exit nodes relay other people&apos;s
+            traffic, so they are often flagged by services — that alone does
+            not make the address malicious.
+          </p>
+        ) : null}
+      </Verdict>
+
+      <div className="space-y-3">
+        <SectionTitle>Location &amp; network</SectionTitle>
+        {data.geo.ok ? (
+          <StatGrid
+            items={[
+              { label: "Country", value: data.geo.country ?? "—" },
+              { label: "City", value: data.geo.city ?? "—" },
+              { label: "Region", value: data.geo.region ?? "—" },
+              { label: "ISP", value: data.geo.isp ?? "—" },
+              { label: "Organization", value: data.geo.org ?? "—" },
+              { label: "ASN", value: data.geo.as ?? "—" },
+              { label: "Timezone", value: data.geo.timezone ?? "—" },
+              { label: "Reverse DNS", value: data.ptr ?? data.geo.reverse ?? "—" },
+              {
+                label: "Coordinates",
+                value:
+                  data.geo.lat !== undefined && data.geo.lon !== undefined
+                    ? `${data.geo.lat}, ${data.geo.lon}`
+                    : "—",
+              },
+            ]}
+          />
+        ) : (
+          <Verdict tone="warning" title="Location lookup failed">
+            <p>{data.geo.error}</p>
+          </Verdict>
+        )}
+        <p className="text-xs leading-relaxed text-gray-500">
+          IP geolocation is approximate — city-level at best, and often just
+          the ISP&apos;s point of presence. Source: ip-api.com.
+        </p>
+      </div>
+
+      <div className="space-y-3 border-t border-gray-100 pt-6">
+        <SectionTitle>Network signals</SectionTitle>
+        <div className="overflow-hidden rounded-lg border border-gray-200">
+          <table className="w-full text-sm">
+            <tbody className="divide-y divide-gray-100">
+              <SignalRow
+                name="VPN / proxy"
+                value={data.geo.ok ? data.geo.proxy : null}
+                hint="Traffic looks like it comes from a VPN or proxy (ip-api.com)"
+              />
+              <SignalRow
+                name="Hosting / datacenter"
+                value={data.geo.ok ? data.geo.hosting : null}
+                hint="Address belongs to a hosting provider, not a home ISP (ip-api.com)"
+              />
+              <SignalRow
+                name="Mobile network"
+                value={data.geo.ok ? data.geo.mobile : null}
+                hint="Address belongs to a mobile carrier (ip-api.com)"
+              />
+              <SignalRow
+                name="Tor exit node"
+                value={data.tor.isExitNode}
+                hint="Listed as a Tor exit relay (dan.me.uk exit list)"
+              />
+            </tbody>
+          </table>
+        </div>
+        <p className="text-xs leading-relaxed text-gray-500">
+          These flags describe the kind of network, not intent — datacenter
+          and VPN addresses are common and usually legitimate.
+        </p>
+      </div>
+
+      {data.abuseipdb.available && abuse?.ok ? (
+        <div className="space-y-3 border-t border-gray-100 pt-6">
+          <SectionTitle>AbuseIPDB details</SectionTitle>
+          <StatGrid
+            items={[
+              {
+                label: "Abuse confidence",
+                value: score !== undefined ? `${score}%` : "—",
+              },
+              {
+                label: "Reports (90 days)",
+                value: reports !== undefined ? String(reports) : "—",
+              },
+              {
+                label: "Last reported",
+                value: formatDate(abuse.lastReportedAt),
+              },
+              { label: "ISP", value: abuse.isp ?? "—" },
+              { label: "Domain", value: abuse.domain ?? "—" },
+              {
+                label: "Whitelisted",
+                value: abuse.isWhitelisted ? "Yes" : "No",
+              },
+            ]}
+          />
+          <p className="text-xs text-gray-500">Source: AbuseIPDB.</p>
+        </div>
+      ) : null}
     </div>
   );
 }

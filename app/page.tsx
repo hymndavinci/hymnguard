@@ -32,8 +32,13 @@ const CHECK_TYPES = [
   },
   {
     name: "Domain",
-    what: "DNS records, TLS certificate expiry and issuer, security-header grade, and subdomains from certificate transparency logs.",
-    source: "DNS · TLS · HTTP · crt.sh",
+    what: "DNS records, TLS certificate, security headers, subdomains, registration, email-auth grade, DNSSEC, blocklists, detected technology, and archive history.",
+    source: "DNS · TLS · HTTP · crt.sh · RDAP · Wayback · OTX · urlscan.io",
+  },
+  {
+    name: "IP",
+    what: "Geolocation, network, and reverse DNS, plus VPN/proxy/Tor signals and AbuseIPDB reputation when a key is configured.",
+    source: "ip-api.com · AbuseIPDB · Tor exit list",
   },
   {
     name: "Phone",
@@ -58,9 +63,9 @@ export default function Home() {
           Know where you&rsquo;re exposed.
         </h1>
         <p className="mt-4 max-w-2xl text-lg leading-relaxed text-gray-500">
-          Check a password, username, email, domain, or phone number against
-          public breach data and live records. Free, no sign-up, and nothing
-          is stored on the server.
+          Check a password, username, email, domain, IP address, or phone
+          number against public breach data and live records. Free, no
+          sign-up, and nothing is stored on the server.
         </p>
         <div className="mt-6 flex flex-wrap gap-2">
           {["Free forever", "No sign-up", "No data stored"].map((badge) => (
@@ -105,7 +110,7 @@ export default function Home() {
           What each check does
         </h2>
         <p className="mt-1 max-w-2xl text-sm leading-relaxed text-gray-500">
-          Five checkers, each against the best free source for its kind. No
+          Six checkers, each against the best free source for its kind. No
           check invents a result when its source is unavailable — it says so.
         </p>
         <div className="mt-6 overflow-hidden rounded-lg border border-gray-200">
@@ -130,7 +135,9 @@ export default function Home() {
         <p className="mt-4 text-xs leading-relaxed text-gray-500">
           Username detection follows the approach of the open-source Sherlock
           project (sherlock-project/sherlock), re-implemented here in
-          TypeScript. Breach data: Have I Been Pwned. Subdomains: crt.sh.
+          TypeScript. Breach data: Have I Been Pwned. Subdomains: crt.sh and
+          AlienVault OTX. Registration: RDAP. History: Wayback Machine. IP
+          data: ip-api.com and AbuseIPDB.
         </p>
       </section>
     </main>

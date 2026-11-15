@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   DomainCheckResult,
   EmailCheckResponse,
+  IpCheckResult,
   PasswordCheckResponse,
   PhoneCheckResult,
   UsernameCheckResult,
@@ -21,6 +22,7 @@ import { sha1Hex } from "@/lib/sha1";
 import {
   DomainResult,
   EmailResult,
+  IpResult,
   PasswordResult,
   PhoneResult,
   UsernameResult,
@@ -53,7 +55,14 @@ const TABS: TabConfig[] = [
     id: "domain",
     label: "Domain",
     placeholder: "example.com",
-    hint: "DNS records, TLS certificate, security headers, subdomains.",
+    hint: "DNS records, TLS certificate, security headers, subdomains, registration, email authentication, blocklists, and more.",
+    privacy: "Checked and discarded — never stored.",
+  },
+  {
+    id: "ip",
+    label: "IP",
+    placeholder: "8.8.8.8",
+    hint: "Location, network, reputation, and VPN/proxy/Tor signals. Public IPs only.",
     privacy: "Checked and discarded — never stored.",
   },
   {
@@ -83,6 +92,7 @@ type CheckResultState =
       progress?: { checked: number; total: number };
     }
   | { type: "domain"; input: string; data: DomainCheckResult; durationMs: number }
+  | { type: "ip"; input: string; data: IpCheckResult; durationMs: number }
   | { type: "phone"; input: string; data: PhoneCheckResult; durationMs: number }
   | { type: "password"; data: { count: number }; durationMs: number };
 
@@ -90,6 +100,7 @@ const EMPTY_INPUTS: Record<CheckType, string> = {
   email: "",
   username: "",
   domain: "",
+  ip: "",
   phone: "",
   password: "",
 };
@@ -128,6 +139,19 @@ function summaryFor(result: CheckResultState): string {
           ? `TLS ${days}d left`
           : "TLS unavailable";
       return `Headers ${result.data.headers.grade} · ${result.data.subdomains.total} subdomains · ${tls}`;
+    }
+    case "ip": {
+      const parts: string[] = [];
+      if (result.data.geo.ok) {
+        if (result.data.geo.country) parts.push(result.data.geo.country);
+        if (result.data.geo.isp) parts.push(result.data.geo.isp);
+      }
+      const abuse = result.data.abuseipdb.result;
+      if (abuse?.ok && abuse.abuseConfidenceScore !== undefined) {
+        parts.push(`AbuseIPDB ${abuse.abuseConfidenceScore}%`);
+      }
+      if (result.data.tor.isExitNode) parts.push("Tor exit node");
+      return parts.length > 0 ? parts.join(" · ") : "Checked";
     }
     case "phone":
       return result.data.valid
@@ -500,6 +524,8 @@ export default function CheckConsole() {
               <UsernameResult data={result.data} progress={result.progress} />
             ) : result.type === "domain" ? (
               <DomainResult data={result.data} />
+            ) : result.type === "ip" ? (
+              <IpResult data={result.data} />
             ) : result.type === "phone" ? (
               <PhoneResult data={result.data} />
             ) : (

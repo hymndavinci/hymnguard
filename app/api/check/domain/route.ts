@@ -36,7 +36,9 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await checkDomain(domain);
+    const result = await checkDomain(domain, {
+      otxApiKey: process.env.OTX_API_KEY,
+    });
     return NextResponse.json(result);
   } catch {
     return NextResponse.json(

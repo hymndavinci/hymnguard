@@ -11,10 +11,14 @@ const DNS_TIMEOUT_MS = 5000;
 
 // Common DKIM selectors. A domain only needs one published selector to
 // count as "DKIM present" — the list is a best-effort probe, not a
-// guarantee that no other selector exists.
+// guarantee that no other selector exists. Google uses date-based
+// selectors for gmail.com (20230601 is current; 20161025 is still
+// published), while Google Workspace customer domains use `google`.
 const DKIM_SELECTORS = [
   "default",
   "google",
+  "20230601",
+  "20161025",
   "selector1",
   "selector2",
   "k1",
@@ -30,6 +34,8 @@ export interface SpfResult {
   present: boolean;
   record?: string;
   policy?: SpfPolicy;
+  /** When the SPF record redirects, the domain the policy was resolved from. */
+  redirect?: string;
 }
 
 export interface DmarcResult {
@@ -72,7 +78,7 @@ function flattenTxt(records: string[][]): string[] {
   return records.map((parts) => parts.join(""));
 }
 
-function parseSpf(records: string[]): SpfResult {
+export function parseSpf(records: string[]): SpfResult {
   const record = records.find((r) => r.startsWith("v=spf1"));
   if (!record) return { present: false };
   let policy: SpfPolicy = "unknown";
@@ -137,16 +143,60 @@ async function resolveTxtSafe(name: string): Promise<string[]> {
   }
 }
 
+/** Resolve SPF, following `redirect=` chains (e.g. gmail.com redirects to
+ * _spf.google.com). The policy comes from the final record in the chain;
+ * `record` stays the domain's own record. Loops and chains longer than 3
+ * hops resolve to policy "unknown" instead of failing. */
+async function resolveSpf(domain: string): Promise<SpfResult> {
+  const seen = new Set<string>([domain]);
+  let current = domain;
+  let originalRecord: string | undefined;
+  let redirect: string | undefined;
+  for (let hop = 0; hop < 4; hop++) {
+    const records = await resolveTxtSafe(current);
+    const record = records.find((r) => r.startsWith("v=spf1"));
+    if (!record) {
+      // No SPF record at this hop. If we arrived here via a redirect, the
+      // chain is broken — the domain still publishes an SPF record, but
+      // its policy cannot be determined.
+      return originalRecord
+        ? { present: true, record: originalRecord, policy: "unknown", redirect }
+        : { present: false };
+    }
+    if (hop === 0) originalRecord = record;
+    const target = record.match(/redirect=([A-Za-z0-9._-]+)/)?.[1];
+    if (!target || seen.has(target)) {
+      const parsed = parseSpf([record]);
+      return { ...parsed, record: originalRecord ?? record, redirect };
+    }
+    seen.add(target);
+    redirect = target;
+    current = target;
+  }
+  return { present: true, record: originalRecord, policy: "unknown", redirect };
+}
+
+/** A TXT record at a `._domainkey` name is a DKIM key when it carries the
+ * version tag — or, for publishers that omit it (Google's older selectors
+ * do), when it carries a public key (`p=`) with a key type. */
+export function isDkimRecord(record: string): boolean {
+  if (record.includes("v=DKIM1")) return true;
+  return (
+    record.includes("p=") &&
+    (record.includes("k=rsa") || record.includes("k=ed25519"))
+  );
+}
+
 export async function checkEmailAuth(domain: string): Promise<EmailAuthResult> {
-  const [spfRecords, dmarcRecords, dkimResults] = await Promise.allSettled([
-    resolveTxtSafe(domain),
+  const [spfResult, dmarcRecords, dkimResults] = await Promise.allSettled([
+    resolveSpf(domain),
     resolveTxtSafe(`_dmarc.${domain}`),
     Promise.all(
       DKIM_SELECTORS.map(async (selector) => {
         const records = await resolveTxtSafe(
           `${selector}._domainkey.${domain}`,
         );
-        const found = records.some((r) => r.includes("v=DKIM1"));
+        const found = records.some(isDkimRecord);
         return { selector, found };
       }),
     ),
@@ -154,7 +204,7 @@ export async function checkEmailAuth(domain: string): Promise<EmailAuthResult> {
 
   // If every lookup failed with a real DNS error, report it instead of
   // pretending all three mechanisms are absent.
-  const failures = [spfRecords, dmarcRecords, dkimResults].filter(
+  const failures = [spfResult, dmarcRecords, dkimResults].filter(
     (r) => r.status === "rejected",
   );
   if (failures.length === 3) {
@@ -172,8 +222,8 @@ export async function checkEmailAuth(domain: string): Promise<EmailAuthResult> {
   }
 
   const spf =
-    spfRecords.status === "fulfilled"
-      ? parseSpf(spfRecords.value ?? [])
+    spfResult.status === "fulfilled"
+      ? spfResult.value
       : { present: false };
   const dmarc =
     dmarcRecords.status === "fulfilled"

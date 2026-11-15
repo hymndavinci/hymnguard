@@ -10,6 +10,7 @@ import type {
 import type { EnumChunkResult, EnumSiteResult } from "./email-enumeration";
 import type { GitHubExposureResult } from "./github-exposure";
 import type { HibpBreachMeta, PwnedRangeEntry } from "./hibp";
+import type { IpCheckResult } from "./ip-check";
 import type { PhoneCheckResult } from "./phone-check";
 import type { UsernameCheckResult } from "./username-check";
 
@@ -20,6 +21,7 @@ export type {
   EnumSiteResult,
   GitHubExposureResult,
   HudsonRockResult,
+  IpCheckResult,
   LeakCheckResult,
   OsintCatResult,
   PhoneCheckResult,

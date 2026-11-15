@@ -1,8 +1,29 @@
-// Domain checks: DNS, TLS certificate, security headers, passive subdomains.
-// All sources are free and keyless: Node DNS/TLS, plain HTTPS, crt.sh.
+// Domain checks: DNS, TLS certificate, security headers, passive subdomains,
+// registration (RDAP), Wayback history, email-auth grading, DNSSEC,
+// blocklists, tech fingerprinting, OTX passive DNS, urlscan activity.
+// All sources are free; OTX needs a free API key (needs-key state otherwise).
 
 import dns from "node:dns/promises";
 import tls from "node:tls";
+import { checkDnsbl, type DnsblResult } from "./dnsbl";
+import { combineDnssec, lookupDnskey, type DnssecResult } from "./dnssec";
+import { checkEmailAuth, type EmailAuthResult } from "./email-auth";
+import { fetchOtxPassiveDns, type OtxResult } from "./otx";
+import { fetchRdap, type RdapResult } from "./rdap";
+import { fingerprintTech, type TechResult } from "./tech-fingerprint";
+import { fetchUrlscan, type UrlscanResult } from "./urlscan";
+import { fetchWayback, type WaybackResult } from "./wayback";
+
+export type {
+  DnsblResult,
+  DnssecResult,
+  EmailAuthResult,
+  OtxResult,
+  RdapResult,
+  TechResult,
+  UrlscanResult,
+  WaybackResult,
+};
 
 export interface DnsResult {
   a: string[];
@@ -57,6 +78,22 @@ export interface DomainCheckResult {
   tls: TlsResult;
   headers: HeadersResult;
   subdomains: SubdomainResult;
+  /** Registration data from RDAP (rdap.org bootstrap). */
+  rdap: RdapResult;
+  /** Wayback Machine history (Internet Archive CDX API). */
+  wayback: WaybackResult;
+  /** SPF / DMARC / DKIM grading (shared module, also used by email checks). */
+  emailAuth: EmailAuthResult;
+  /** DNSSEC status (RDAP delegation + DNSKEY records). */
+  dnssec: DnssecResult;
+  /** DNS blocklists (Spamhaus ZEN + DBL, SpamCop). */
+  dnsbl: DnsblResult;
+  /** Detected server / CDN / CMS / framework technologies. */
+  tech: TechResult;
+  /** AlienVault OTX passive DNS (keyed). */
+  otx: { available: boolean; result?: OtxResult };
+  /** Recent public urlscan.io scans. */
+  urlscan: UrlscanResult;
 }
 
 const USER_AGENT =
@@ -361,14 +398,44 @@ async function checkSubdomains(domain: string): Promise<SubdomainResult> {
   }
 }
 
-export async function checkDomain(domain: string): Promise<DomainCheckResult> {
-  const [dnsResult, tlsResult, headersResult, subdomainResult] =
-    await Promise.all([
-      resolveDns(domain),
-      checkTls(domain),
-      checkHeaders(domain),
-      checkSubdomains(domain),
-    ]);
+export async function checkDomain(
+  domain: string,
+  opts: { otxApiKey?: string } = {},
+): Promise<DomainCheckResult> {
+  // DNS runs first: the blocklist check needs the domain's A records.
+  const dnsResult = await resolveDns(domain);
+
+  const [
+    tlsResult,
+    headersResult,
+    subdomainResult,
+    rdapResult,
+    dnskeyPresent,
+    waybackResult,
+    emailAuthResult,
+    dnsblResult,
+    techResult,
+    otx,
+    urlscanResult,
+  ] = await Promise.all([
+    checkTls(domain),
+    checkHeaders(domain),
+    checkSubdomains(domain),
+    fetchRdap(domain),
+    lookupDnskey(domain),
+    fetchWayback(domain),
+    checkEmailAuth(domain),
+    checkDnsbl(domain, dnsResult.a),
+    fingerprintTech(domain),
+    (async (): Promise<{ available: boolean; result?: OtxResult }> => {
+      if (!opts.otxApiKey) return { available: false };
+      return {
+        available: true,
+        result: await fetchOtxPassiveDns(domain, opts.otxApiKey),
+      };
+    })(),
+    fetchUrlscan(domain),
+  ]);
 
   return {
     domain,
@@ -377,5 +444,13 @@ export async function checkDomain(domain: string): Promise<DomainCheckResult> {
     tls: tlsResult,
     headers: headersResult,
     subdomains: subdomainResult,
+    rdap: rdapResult,
+    wayback: waybackResult,
+    emailAuth: emailAuthResult,
+    dnssec: combineDnssec(rdapResult.delegationSigned, dnskeyPresent),
+    dnsbl: dnsblResult,
+    tech: techResult,
+    otx,
+    urlscan: urlscanResult,
   };
 }
