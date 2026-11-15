@@ -69,7 +69,7 @@ const TABS: TabConfig[] = [
     id: "phone",
     label: "Phone",
     placeholder: "+6281234567890",
-    hint: "Format, country, and validity. Not a breach lookup.",
+    hint: "Format, carrier, and community spam reports. Not a breach lookup.",
     privacy: "Checked and discarded — never stored.",
   },
   {

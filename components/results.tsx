@@ -1175,6 +1175,44 @@ export function IpResult({ data }: { data: IpCheckResult }) {
 // -------------------------------------------------------------------- phone
 
 export function PhoneResult({ data }: { data: PhoneCheckResult }) {
+  const ipqs = data.ipqs.result;
+  const gc = data.spam.getcontact;
+  const sia = data.spam.shouldianswer;
+  const fraudScore = ipqs?.ok ? ipqs.fraudScore : undefined;
+  const fraudHigh = fraudScore !== undefined && fraudScore >= 85;
+  const ipqsFlagged =
+    ipqs?.ok === true && (ipqs.spammer === true || ipqs.recentAbuse === true);
+  const gcFlagged =
+    gc.ok &&
+    gc.inDatabase &&
+    (gc.risk === "High risk" || gc.feedback === "Negative");
+  const siaFlagged =
+    sia.ok &&
+    sia.covered &&
+    (sia.reports ?? 0) > 0 &&
+    (sia.rating ?? 5) <= 2;
+  const spamFlagged = gcFlagged || siaFlagged;
+
+  const statItems: { label: string; value: string }[] = [
+    { label: "E.164", value: data.e164 ?? "—" },
+    { label: "Country", value: data.country ?? "—" },
+    {
+      label: "Calling code",
+      value: data.countryCallingCode ? `+${data.countryCallingCode}` : "—",
+    },
+    { label: "Type", value: data.type ?? "—" },
+    { label: "International", value: data.international ?? "—" },
+    { label: "National", value: data.national ?? "—" },
+  ];
+  if (data.idOperator) {
+    statItems.push({
+      label: "Operator (prefix)",
+      value: data.idOperator.parent
+        ? `${data.idOperator.operator} · ${data.idOperator.parent}`
+        : data.idOperator.operator,
+    });
+  }
+
   return (
     <div className="space-y-4">
       <Verdict
@@ -1191,25 +1229,214 @@ export function PhoneResult({ data }: { data: PhoneCheckResult }) {
             : "The number could not be validated. Check the country code and the digits."}
         </p>
       </Verdict>
-      <StatGrid
-        items={[
-          { label: "E.164", value: data.e164 ?? "—" },
-          { label: "Country", value: data.country ?? "—" },
-          {
-            label: "Calling code",
-            value: data.countryCallingCode
-              ? `+${data.countryCallingCode}`
-              : "—",
-          },
-          { label: "Type", value: data.type ?? "—" },
-          { label: "International", value: data.international ?? "—" },
-          { label: "National", value: data.national ?? "—" },
-        ]}
-      />
+      <StatGrid items={statItems} />
+      {data.idOperator ? (
+        <p className="text-xs leading-relaxed text-gray-500">
+          Prefix {data.idOperator.prefix} was allocated to{" "}
+          {data.idOperator.operator}. The current operator can differ if the
+          number was ported.
+        </p>
+      ) : null}
+
+      {data.valid ? (
+        <>
+          <div className="space-y-3 border-t border-gray-100 pt-4">
+            <SectionTitle>Carrier &amp; risk</SectionTitle>
+            {!data.ipqs.available ? (
+              <p className="text-[13px] leading-relaxed text-gray-500">
+                Carrier and risk lookup needs an API key (IPQS_API_KEY, free
+                tier). No key is configured, so no carrier or risk result is
+                shown.
+              </p>
+            ) : !ipqs?.ok ? (
+              <p className="text-[13px] leading-relaxed text-gray-500">
+                {ipqs?.error ?? "The IPQS lookup failed."}
+              </p>
+            ) : (
+              <>
+                {fraudHigh || ipqsFlagged ? (
+                  <p className="text-[13px] font-medium leading-relaxed text-amber-800">
+                    {fraudHigh
+                      ? `High fraud score (${fraudScore}/100).`
+                      : ""}
+                    {ipqs.spammer ? " Flagged as a spammer by IPQS." : ""}
+                    {ipqs.recentAbuse
+                      ? " Associated with recent abuse."
+                      : ""}
+                  </p>
+                ) : null}
+                <StatGrid
+                  items={[
+                    { label: "Carrier", value: ipqs.carrier ?? "—" },
+                    { label: "Line type", value: ipqs.lineType ?? "—" },
+                    {
+                      label: "Fraud score",
+                      value:
+                        fraudScore !== undefined ? `${fraudScore}/100` : "—",
+                    },
+                    {
+                      label: "Active",
+                      value: ipqs.activeStatus ?? (ipqs.active === undefined ? "—" : ipqs.active ? "Yes" : "No"),
+                    },
+                    {
+                      label: "Recent abuse",
+                      value:
+                        ipqs.recentAbuse === undefined
+                          ? "—"
+                          : ipqs.recentAbuse
+                            ? "Yes"
+                            : "No",
+                    },
+                    {
+                      label: "In a data leak",
+                      value:
+                        ipqs.leaked === undefined
+                          ? "—"
+                          : ipqs.leaked
+                            ? "Yes"
+                            : "No",
+                    },
+                    {
+                      label: "VoIP",
+                      value:
+                        ipqs.voip === undefined
+                          ? "—"
+                          : ipqs.voip
+                            ? "Yes"
+                            : "No",
+                    },
+                    {
+                      label: "Prepaid",
+                      value:
+                        ipqs.prepaid === undefined
+                          ? "—"
+                          : ipqs.prepaid
+                            ? "Yes"
+                            : "No",
+                    },
+                  ]}
+                />
+                <p className="text-xs text-gray-500">Source: IPQualityScore.</p>
+              </>
+            )}
+          </div>
+
+          <div className="space-y-3 border-t border-gray-100 pt-4">
+            <SectionTitle>Spam reports</SectionTitle>
+            {spamFlagged ? (
+              <Verdict tone="warning" title="Reported as spam or scam">
+                <p>
+                  Community reports flag this number. Do not answer unknown
+                  calls from it, and never share codes or transfer money to
+                  callers you did not expect.
+                </p>
+              </Verdict>
+            ) : null}
+            {!gc.ok ? (
+              <p className="text-[13px] leading-relaxed text-gray-500">
+                GetContact: {gc.error ?? "The lookup failed."}
+              </p>
+            ) : !gc.inDatabase ? (
+              <p className="text-[13px] leading-relaxed text-gray-500">
+                No reports on GetContact — this number is not in their
+                community database.
+              </p>
+            ) : (
+              <>
+                <StatGrid
+                  items={[
+                    {
+                      label: "User reports",
+                      value:
+                        gc.reports !== undefined
+                          ? formatNumber(gc.reports)
+                          : "—",
+                    },
+                    { label: "Risk", value: gc.risk ?? "—" },
+                    { label: "Community", value: gc.feedback ?? "—" },
+                    {
+                      label: "Total calls",
+                      value:
+                        gc.totalCalls !== undefined
+                          ? formatNumber(gc.totalCalls)
+                          : "—",
+                    },
+                    {
+                      label: "Blocked",
+                      value:
+                        gc.blocked === undefined
+                          ? "—"
+                          : gc.blocked
+                            ? "Yes"
+                            : "No",
+                    },
+                    { label: "Region", value: gc.region ?? "—" },
+                  ]}
+                />
+                <p className="text-xs text-gray-500">
+                  Source:{" "}
+                  <a
+                    href={gc.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-gray-700 underline underline-offset-2"
+                  >
+                    Getcontact
+                    <ExternalIcon />
+                  </a>
+                  .
+                </p>
+              </>
+            )}
+            {sia.covered ? (
+              !sia.ok ? (
+                <p className="text-[13px] leading-relaxed text-gray-500">
+                  Should I Answer: {sia.error ?? "The lookup failed."}
+                </p>
+              ) : (sia.reports ?? 0) === 0 ? (
+                <p className="text-[13px] leading-relaxed text-gray-500">
+                  No community reports on Should I Answer.
+                </p>
+              ) : (
+                <p className="text-[13px] leading-relaxed text-gray-700">
+                  Should I Answer: rated {sia.rating ?? "?"}/5 from{" "}
+                  {formatNumber(sia.reports ?? 0)} community review
+                  {sia.reports === 1 ? "" : "s"}
+                  {sia.url ? (
+                    <>
+                      {" — "}
+                      <a
+                        href={sia.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 underline underline-offset-2"
+                      >
+                        view reports
+                        <ExternalIcon />
+                      </a>
+                    </>
+                  ) : null}
+                  .
+                </p>
+              )
+            ) : (
+              <p className="text-xs leading-relaxed text-gray-500">
+                Should I Answer only covers +1 (US/CA) numbers.
+              </p>
+            )}
+            <p className="text-xs leading-relaxed text-gray-500">
+              Community reports are best-effort signals, not proof — a number
+              with no reports here may still be unwanted, and reports can be
+              wrong.
+            </p>
+          </div>
+        </>
+      ) : null}
+
       <p className="text-xs leading-relaxed text-gray-500">
-        Format, country, and validity only. No free, legitimate source exists
-        for phone-number breach lookups, so this check does not claim to find
-        breaches.
+        Format, country, carrier, and community reports only. No free,
+        legitimate source exists for phone-number breach lookups, so this
+        check does not claim to find breaches.
       </p>
     </div>
   );

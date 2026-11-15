@@ -4,10 +4,12 @@ import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { normalizePhone } from "@/lib/validate";
 
 export const runtime = "nodejs";
+export const maxDuration = 10;
 
 // POST { phone: "+6281234567890" }
-// Format / country / validity only — no breach lookup exists for phone
-// numbers from a free, legitimate source.
+// Format / country / validity + ID operator prefix + carrier/risk (IPQS,
+// keyed) + community spam reports (GetContact, Should I Answer). No
+// breach lookup exists for phone numbers from a free, legitimate source.
 export async function POST(req: Request) {
   const ip = getClientIp(req);
   const limit = checkRateLimit(`check:phone:${ip}`);
@@ -36,5 +38,7 @@ export async function POST(req: Request) {
     );
   }
 
-  return NextResponse.json(checkPhone(phone));
+  return NextResponse.json(
+    await checkPhone(phone, { ipqsKey: process.env.IPQS_API_KEY }),
+  );
 }

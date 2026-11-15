@@ -42,8 +42,8 @@ const CHECK_TYPES = [
   },
   {
     name: "Phone",
-    what: "Parses and validates the number: country, calling code, type, and E.164 format.",
-    source: "libphonenumber metadata",
+    what: "Validates the number, identifies the Indonesian operator from its prefix, and checks carrier/risk plus community spam reports.",
+    source: "libphonenumber · prefix table · IPQS · GetContact",
   },
   {
     name: "Password",
@@ -137,7 +137,8 @@ export default function Home() {
           project (sherlock-project/sherlock), re-implemented here in
           TypeScript. Breach data: Have I Been Pwned. Subdomains: crt.sh and
           AlienVault OTX. Registration: RDAP. History: Wayback Machine. IP
-          data: ip-api.com and AbuseIPDB.
+          data: ip-api.com and AbuseIPDB. Phone data: IPQualityScore,
+          GetContact, and Should I Answer.
         </p>
       </section>
     </main>

@@ -67,14 +67,15 @@ New identifier: **IP address**
 - Shared with Phase 2: SPF / DKIM / DMARC grading for the email's domain.
 - **Outcome:** enumeration pruned to 7 verified probes (Adobe, Gravatar, Replit, Spotify, X, WordPress.com, XVideos) of 76 candidates — 69 excluded (endpoints changed, bot-blocked, no signal, or no positive confirmation; see README). Breach sources live: LeakCheck + Hudson Rock (free, verified), HIBP + OsintCat + GitHub exposure (keyed, needs-key states until keys are set). CheckLeaked excluded (paid-only, redundant); SMTP deep verification skipped (outbound SMTP blocked on Vercel). Ownership verification needs `RESEND_API_KEY` + `RESEND_FROM` (verified domain) + `VERIFY_SECRET` — until those are set, enumeration reports needs-key and never runs.
 
-## Phase 4 — Phone expansion (NEXT — limited by free sources)
+## Phase 4 — Phone expansion (DONE — live 2026-11-15)
 
 - **PhoneInfoga-style aggregation** — carrier lookup from free sources, prefix databases (including Indonesia prefix data), line-type detection.
 - **Spam / scam reports** — presence in public complaint boards (fragile, scraping-dependent — treat as best-effort).
 - **Honest scope:** format, country, carrier, line type, spam-report presence. Truecaller / Twilio-class identity data stays behind BYOK (Phase 5).
 - Phone remains the hardest category for free sources. No overpromising.
+- **Outcome:** offline ID prefix table (42 prefixes, Wikipedia-verified); IPQS carrier + risk (keyed, from docs, untested live — no key); GetContact spam reports (aggregate signals only, verified both directions: 610-report spam number vs 404 clean number); Should I Answer for NANP only (verified both directions). Excluded: tellows (403), whocalld (unreachable), spamcalls.net (unreliable redirects), shouldianswer ID subdomain (empty database — known spam numbers show 0 reviews), Truecaller (account required), phone breach lookup (no free legitimate source). IPQS owner name / associated emails deliberately never read or shown.
 
-## Phase 5 — Platform: accounts, history, monitoring, BYOK
+## Phase 5 — Platform: accounts, history, monitoring, BYOK (NEXT)
 
 The biggest architectural step. Turns HymnGuard from a tool into a service.
 
