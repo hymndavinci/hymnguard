@@ -11,6 +11,7 @@ import type {
   UsernameChunkResponse,
   UsernamePlanResponse,
 } from "@/lib/api-types";
+import { CHECKERS } from "@/lib/checkers";
 import {
   addHistoryEntry,
   clearHistory,
@@ -28,58 +29,9 @@ import {
   UsernameResult,
 } from "./results";
 
-interface TabConfig {
-  id: CheckType;
-  label: string;
-  placeholder: string;
-  hint: string;
-  privacy: string;
-}
-
-const TABS: TabConfig[] = [
-  {
-    id: "email",
-    label: "Email",
-    placeholder: "you@example.com",
-    hint: "Mail records, breach lookups, email authentication, infostealer exposure, and optional account enumeration after ownership verification.",
-    privacy: "Checked and discarded — never stored.",
-  },
-  {
-    id: "username",
-    label: "Username",
-    placeholder: "username",
-    hint: "Probed across 256 sites, in chunks — results stream in as each chunk finishes.",
-    privacy: "Checked and discarded — never stored.",
-  },
-  {
-    id: "domain",
-    label: "Domain",
-    placeholder: "example.com",
-    hint: "DNS records, TLS certificate, security headers, subdomains, registration, email authentication, blocklists, and more.",
-    privacy: "Checked and discarded — never stored.",
-  },
-  {
-    id: "ip",
-    label: "IP",
-    placeholder: "8.8.8.8",
-    hint: "Location, network, reputation, and VPN/proxy/Tor signals. Public IPs only.",
-    privacy: "Checked and discarded — never stored.",
-  },
-  {
-    id: "phone",
-    label: "Phone",
-    placeholder: "+6281234567890",
-    hint: "Format, carrier, and community spam reports. Not a breach lookup.",
-    privacy: "Checked and discarded — never stored.",
-  },
-  {
-    id: "password",
-    label: "Password",
-    placeholder: "Enter a password to check",
-    hint: "Checked against Have I Been Pwned with k-anonymity.",
-    privacy: "Hashed in your browser. Only the first 5 characters of the hash leave this page.",
-  },
-];
+// Tabs come from the checker registry (lib/checkers.ts) — adding a
+// checker there adds its tab here.
+const TABS = CHECKERS;
 
 type CheckResultState =
   | { type: "email"; input: string; data: EmailCheckResponse; durationMs: number }
@@ -111,8 +63,12 @@ function summaryFor(result: CheckResultState): string {
       if (!result.data.mxOk) return "No MX records";
       const parts: string[] = [];
       if (result.data.hibp.available) {
-        const count = result.data.hibp.breaches?.length ?? 0;
-        parts.push(count > 0 ? `HIBP: ${count} breach${count === 1 ? "" : "es"}` : "HIBP: clean");
+        if (result.data.hibp.error) {
+          parts.push("HIBP: lookup failed");
+        } else {
+          const count = result.data.hibp.breaches?.length ?? 0;
+          parts.push(count > 0 ? `HIBP: ${count} breach${count === 1 ? "" : "es"}` : "HIBP: clean");
+        }
       }
       if (result.data.leakcheck.status === "ok") {
         parts.push(`LeakCheck: ${result.data.leakcheck.found} records`);
@@ -183,6 +139,8 @@ export default function CheckConsole() {
   const [result, setResult] = useState<CheckResultState | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [loggedIn, setLoggedIn] = useState(false);
+  const loggedInRef = useRef(false);
   const elapsedTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const tab = TABS.find((t) => t.id === activeTab) ?? TABS[0];
@@ -190,7 +148,29 @@ export default function CheckConsole() {
   useEffect(() => {
     setHistory(loadHistory());
     setHistoryLoaded(true);
+    // Signed-in users also get server-side history (hashed identifiers,
+    // masked hints — see POST /api/history). Best-effort: a failed check
+    // here just means local-only history.
+    fetch("/api/auth/me")
+      .then((res) => {
+        loggedInRef.current = res.ok;
+        setLoggedIn(res.ok);
+      })
+      .catch(() => {});
   }, []);
+
+  // Fire-and-forget: server history must never block or break a check.
+  const logToServerHistory = useCallback(
+    (type: CheckType, input: string, summary: string) => {
+      if (!loggedInRef.current) return;
+      fetch("/api/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, input, summary }),
+      }).catch(() => {});
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!running) return;
@@ -242,6 +222,7 @@ export default function CheckConsole() {
           setHistory(
             addHistoryEntry({ type, input: "", summary: summaryFor(state) }),
           );
+          logToServerHistory(type, "", summaryFor(state));
           return;
         }
 
@@ -318,6 +299,7 @@ export default function CheckConsole() {
           setHistory(
             addHistoryEntry({ type, input: value, summary: summaryFor(finalState) }),
           );
+          logToServerHistory(type, value, summaryFor(finalState));
           return;
         }
 
@@ -343,6 +325,7 @@ export default function CheckConsole() {
         setHistory(
           addHistoryEntry({ type, input: value, summary: summaryFor(state) }),
         );
+        logToServerHistory(type, value, summaryFor(state));
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "The check failed. Try again.",
@@ -557,6 +540,9 @@ export default function CheckConsole() {
             <p className="mt-1 text-sm text-gray-500">
               Stored only in this browser. Passwords are never stored — not
               even here.
+              {loggedIn
+                ? " Signed in — checks are also saved to your account (hashed identifiers, masked hints)."
+                : ""}
             </p>
           </div>
           {historyLoaded && history.length > 0 ? (

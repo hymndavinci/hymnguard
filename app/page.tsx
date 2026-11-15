@@ -6,8 +6,16 @@ const PRIVACY_POINTS = [
     body: "A password is hashed locally with SHA-1. Only the first 5 characters of the hash are sent, and the match is done back in your browser.",
   },
   {
-    title: "Nothing is stored on the server",
-    body: "Every check runs per request. Identifiers are never logged, never written to a database, and never leave the request.",
+    title: "Anonymous checks store nothing",
+    body: "Every check runs per request. Without an account, identifiers are never logged, never written to a database, and never leave the request.",
+  },
+  {
+    title: "Accounts are optional",
+    body: "Sign up to save history, watch emails for new breaches, and use your own API keys. Saved history stores hashed identifiers and masked hints — never raw passwords.",
+  },
+  {
+    title: "Your keys stay yours",
+    body: "API keys you save (BYOK) are encrypted at rest, used server-side only, and never shown back in full.",
   },
   {
     title: "Free public sources only",
@@ -65,10 +73,11 @@ export default function Home() {
         <p className="mt-4 max-w-2xl text-lg leading-relaxed text-gray-500">
           Check a password, username, email, domain, IP address, or phone
           number against public breach data and live records. Free, no
-          sign-up, and nothing is stored on the server.
+          sign-up needed — and an optional account adds saved history,
+          breach monitoring, and your own API keys.
         </p>
         <div className="mt-6 flex flex-wrap gap-2">
-          {["Free forever", "No sign-up", "No data stored"].map((badge) => (
+          {["Free forever", "No sign-up needed", "Private by design"].map((badge) => (
             <span
               key={badge}
               className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-600"

@@ -4,20 +4,23 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/db-push-if-configured.mjs && next build",
     "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.2.1",
     "geist": "^1.9.2",
     "libphonenumber-js": "^1.12.26",
     "next": "^16.3.2",
+    "pg": "^8.23.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.17",
     "@types/node": "^24.0.0",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "tailwindcss": "^4.1.17",

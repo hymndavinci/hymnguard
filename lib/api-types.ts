@@ -59,6 +59,8 @@ export interface EmailCheckResponse {
     available: boolean;
     rateLimited?: boolean;
     breaches?: HibpBreachMeta[];
+    /** Present when the lookup itself failed (e.g. a rejected API key). */
+    error?: string;
   };
   /** SPF / DMARC / DKIM grading for the email's domain (DNS-only). */
   auth: EmailAuthResult;

@@ -1647,6 +1647,10 @@ export function EmailResult({ data }: { data: EmailCheckResponse }) {
                 in a few minutes.
               </p>
             </Verdict>
+          ) : hibp.error ? (
+            <Verdict tone="warning" title="Breach lookup failed">
+              <p>{hibp.error}</p>
+            </Verdict>
           ) : hibp.breaches && hibp.breaches.length > 0 ? (
             <>
               <Verdict

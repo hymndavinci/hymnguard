@@ -75,16 +75,19 @@ New identifier: **IP address**
 - Phone remains the hardest category for free sources. No overpromising.
 - **Outcome:** offline ID prefix table (42 prefixes, Wikipedia-verified); IPQS carrier + risk (keyed, from docs, untested live — no key); GetContact spam reports (aggregate signals only, verified both directions: 610-report spam number vs 404 clean number); Should I Answer for NANP only (verified both directions). Excluded: tellows (403), whocalld (unreachable), spamcalls.net (unreliable redirects), shouldianswer ID subdomain (empty database — known spam numbers show 0 reviews), Truecaller (account required), phone breach lookup (no free legitimate source). IPQS owner name / associated emails deliberately never read or shown.
 
-## Phase 5 — Platform: accounts, history, monitoring, BYOK (NEXT)
+## Phase 5 — Platform: accounts, history, monitoring, BYOK (DONE — live 2026-11-15)
 
 The biggest architectural step. Turns HymnGuard from a tool into a service.
 
-- **Auth** — email/password + Google (same pattern as Hymn Router).
-- **Database** — Postgres (Neon) + Prisma. Saved check history per account.
-- **Breach monitoring** — watch identifiers, re-check on schedule, email alerts (Resend) when a new breach hits a watched identifier.
-- **Bring Your Own Key (BYOK)** — users add their own API keys (HIBP, Shodan, Censys, AbuseIPDB, Hunter). Keys encrypted at rest, used server-side only, never exposed to the browser.
-- **Plugin architecture** — each source becomes a module declaring: name, cost (free/paid), key required?, rate limit, confidence. New sources become additive instead of rewrites.
-- **Caching** — results cached by identifier hash (breach data changes slowly; re-checks are cheap).
+- **Auth** — email/password (scrypt hashing, HMAC-signed stateless session cookies, token-version revocation on password reset). Google OAuth NOT built: creating an OAuth client needs the owner's Google Cloud Console; the schema reserves `users.provider` + `users.google_sub` for it.
+- **Database** — Postgres (Neon) + **raw SQL, not Prisma**: the Prisma CLI cannot run in this project's build environment (it downloads engine binaries and the egress proxy aborts those downloads with ECONNRESET). Schema in `db/migrations/001_init.sql`, applied idempotently by `scripts/db-push-if-configured.mjs` at build time when `DATABASE_URL` is set. Runtime uses the Neon HTTP driver for `*.neon.tech` URLs, `pg` otherwise. Saved check history per account (hashed identifiers + masked hints; passwords never stored).
+- **Breach monitoring** — watch up to 5 emails (ownership-verified only), re-checked daily by Vercel Cron against LeakCheck + Hudson Rock, alert email via Resend when new exposure appears. Monitored emails stored AES-256-GCM encrypted.
+- **Bring Your Own Key (BYOK)** — users add their own API keys (HIBP, OsintCat, GitHub, OTX, AbuseIPDB, IPQS). Keys encrypted at rest (AES-256-GCM), used server-side only, never shown back in full (masked hints only). BYOK requests bypass the result cache.
+- **Plugin architecture** — `lib/checkers.ts` registry: each checker declares id, label, route, sources (name, cost, key, confidence), and cache TTL. Console tabs derive from it; Phase 6 types plug in by adding one entry + their route.
+- **Caching** — route-level results cached by identifier hash (email 1h, domain 6h, IP/phone 24h; password and username never), DB-backed when a database is configured, in-memory otherwise. `X-Cache: HIT|MISS` header.
+- **Also fixed in this phase:** a bad HIBP key (server or BYOK) used to fail the whole email check with a 502; it now surfaces as an honest per-source error.
+- **Verified live locally (61/61 E2E assertions against a local Postgres)** and on production for the no-DB states. The Neon-driver path is untested live until `DATABASE_URL` is set — see the deployment note below.
+- **Deployment note:** accounts need Bintang to create the Neon project and set `DATABASE_URL` (plus `SESSION_SECRET`, `ENCRYPTION_KEY`, `CRON_SECRET` — set by the agent in Vercel). Until then the app runs as before: all checkers work anonymously and sign-in reports "not configured".
 
 ## Phase 6 — New identifier types
 

@@ -19,12 +19,26 @@
 // Without either, enumeration reports a needs-key state and never runs.
 
 import crypto from "node:crypto";
+import { sendEmail, type SendEmailResult } from "./resend";
+
+export type ResendSendResult = SendEmailResult;
 
 export const CODE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 export const VERIFICATION_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 export function generateCode(): string {
   return String(crypto.randomInt(100000, 1000000));
+}
+
+/** SHA-256 hash of a 6-digit code, for database-stored codes (signup and
+ *  password-reset flows). The code itself is never stored. */
+export function hashCode(code: string): string {
+  return crypto.createHash("sha256").update(code).digest("hex");
+}
+
+/** Constant-time comparison of a supplied code against a stored hash. */
+export function codeHashMatches(code: string, storedHash: string): boolean {
+  return safeEqual(hashCode(code), storedHash);
 }
 
 function b64urlEncode(text: string): string {
@@ -104,11 +118,8 @@ export function verifyVerificationToken(
 // only sends from onboarding@resend.dev to the account owner's own address;
 // sending verification codes to arbitrary emails requires a verified domain
 // (set RESEND_FROM to an address on that domain).
-
-export interface ResendSendResult {
-  ok: boolean;
-  error?: string;
-}
+// The actual send lives in lib/resend.ts (shared with signup codes,
+// password resets, and breach alerts).
 
 export async function sendVerificationCode(
   email: string,
@@ -116,49 +127,22 @@ export async function sendVerificationCode(
   apiKey: string,
   from: string,
 ): Promise<ResendSendResult> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from,
-        to: [email],
-        subject: `Your HymnGuard verification code: ${code}`,
-        text:
-          `Your HymnGuard verification code is: ${code}\n\n` +
-          `It expires in 10 minutes. Enter it in HymnGuard to prove you own ` +
-          `this email address and unlock the account-enumeration check.\n\n` +
-          `If you did not request this, ignore this email — no check will run.`,
-        html:
-          `<p>Your HymnGuard verification code is:</p>` +
-          `<p style="font-size: 28px; font-weight: 700; letter-spacing: 4px; font-family: monospace;">${code}</p>` +
-          `<p>It expires in 10 minutes. Enter it in HymnGuard to prove you own this email address and unlock the account-enumeration check.</p>` +
-          `<p>If you did not request this, ignore this email — no check will run.</p>`,
-      }),
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      return {
-        ok: false,
-        error: `Resend responded with HTTP ${res.status}${body ? `: ${body.slice(0, 200)}` : ""}`,
-      };
-    }
-    return { ok: true };
-  } catch (err) {
-    return {
-      ok: false,
-      error:
-        err instanceof Error && err.name === "AbortError"
-          ? "Resend request timed out"
-          : "Could not reach Resend",
-    };
-  } finally {
-    clearTimeout(timer);
-  }
+  return sendEmail(
+    {
+      to: email,
+      subject: `Your HymnGuard verification code: ${code}`,
+      text:
+        `Your HymnGuard verification code is: ${code}\n\n` +
+        `It expires in 10 minutes. Enter it in HymnGuard to prove you own ` +
+        `this email address and unlock the account-enumeration check.\n\n` +
+        `If you did not request this, ignore this email — no check will run.`,
+      html:
+        `<p>Your HymnGuard verification code is:</p>` +
+        `<p style="font-size: 28px; font-weight: 700; letter-spacing: 4px; font-family: monospace;">${code}</p>` +
+        `<p>It expires in 10 minutes. Enter it in HymnGuard to prove you own this email address and unlock the account-enumeration check.</p>` +
+        `<p>If you did not request this, ignore this email — no check will run.</p>`,
+    },
+    apiKey,
+    from,
+  );
 }

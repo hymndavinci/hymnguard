@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import type { PhoneCheckResult } from "@/lib/api-types";
+import { getCurrentUser } from "@/lib/auth";
+import { getCachedResult, setCachedResult } from "@/lib/check-cache";
+import { resolveKeys } from "@/lib/keys";
 import { checkPhone } from "@/lib/phone-check";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { normalizePhone } from "@/lib/validate";
@@ -38,7 +42,22 @@ export async function POST(req: Request) {
     );
   }
 
-  return NextResponse.json(
-    await checkPhone(phone, { ipqsKey: process.env.IPQS_API_KEY }),
-  );
+  // BYOK: a logged-in user's own keys win over the server env keys.
+  const user = await getCurrentUser(req);
+  const keys = await resolveKeys(user?.id ?? null);
+
+  // Route-level cache (bypassed entirely when a BYOK key is in play).
+  if (!keys.usedByok) {
+    const cached = await getCachedResult<PhoneCheckResult>("phone", phone);
+    if (cached) {
+      return NextResponse.json(cached, { headers: { "X-Cache": "HIT" } });
+    }
+  }
+
+  const result = await checkPhone(phone, { ipqsKey: keys.ipqs });
+  if (!keys.usedByok) {
+    await setCachedResult("phone", phone, result);
+    return NextResponse.json(result, { headers: { "X-Cache": "MISS" } });
+  }
+  return NextResponse.json(result);
 }

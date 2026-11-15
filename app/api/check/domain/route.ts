@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
+import type { DomainCheckResult } from "@/lib/api-types";
+import { getCurrentUser } from "@/lib/auth";
+import { getCachedResult, setCachedResult } from "@/lib/check-cache";
 import { checkDomain } from "@/lib/domain-check";
+import { resolveKeys } from "@/lib/keys";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { normalizeDomain } from "@/lib/validate";
 
@@ -36,9 +40,28 @@ export async function POST(req: Request) {
   }
 
   try {
+    // BYOK: a logged-in user's own keys win over the server env keys.
+    const user = await getCurrentUser(req);
+    const keys = await resolveKeys(user?.id ?? null);
+
+    // Route-level cache (bypassed entirely when a BYOK key is in play).
+    if (!keys.usedByok) {
+      const cached = await getCachedResult<DomainCheckResult>(
+        "domain",
+        domain,
+      );
+      if (cached) {
+        return NextResponse.json(cached, { headers: { "X-Cache": "HIT" } });
+      }
+    }
+
     const result = await checkDomain(domain, {
-      otxApiKey: process.env.OTX_API_KEY,
+      otxApiKey: keys.otx,
     });
+    if (!keys.usedByok) {
+      await setCachedResult("domain", domain, result);
+      return NextResponse.json(result, { headers: { "X-Cache": "MISS" } });
+    }
     return NextResponse.json(result);
   } catch {
     return NextResponse.json(

@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
+import AuthNav from "@/components/auth-nav";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "HymnGuard — Free Security Exposure Checker",
   description:
-    "Check a password, username, email, domain, or phone number against public breach data and live records. Free, no sign-up, nothing stored on the server.",
+    "Check a password, username, email, domain, or phone number against public breach data and live records. Free. Checks need no sign-up and store nothing; an optional account adds history, monitoring, and your own API keys.",
   metadataBase: new URL("https://hymnguard.vercel.app"),
   openGraph: {
     title: "HymnGuard — Free Security Exposure Checker",
@@ -84,6 +85,7 @@ export default function RootLayout({
                 </svg>
                 <span className="hidden sm:inline">GitHub</span>
               </a>
+              <AuthNav />
             </nav>
           </div>
         </header>
@@ -97,7 +99,8 @@ export default function RootLayout({
               Been Pwned, crt.sh, public DNS records.
             </p>
             <p className="font-mono text-xs">
-              No identifiers are stored on the server.
+              Anonymous checks store nothing on the server. Accounts are
+              optional.
             </p>
           </div>
         </footer>
