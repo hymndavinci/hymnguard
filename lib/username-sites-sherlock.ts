@@ -10,7 +10,7 @@
 // with the reason. The 30 hand-tuned curated sites live in
 // lib/username-sites.ts and always win on id collision.
 //
-// Counts at generation: 229 kept, 222 excluded
+// Counts at generation: 226 kept, 225 excluded
 // (of 451 ported candidates; 30 Sherlock entries duplicate
 // curated rules and were skipped by the converter).
 
@@ -1135,13 +1135,6 @@ export const SHERLOCK_USERNAME_SITES: UsernameSite[] = [
     detection: "status",
   },
   {
-    id: "pornhub",
-    name: "Pornhub",
-    urlTemplate: "https://pornhub.com/users/{}",
-    detection: "status",
-    isNSFW: true,
-  },
-  {
     id: "pr0gramm",
     name: "pr0gramm",
     urlTemplate: "https://pr0gramm.com/user/{}",
@@ -1172,13 +1165,6 @@ export const SHERLOCK_USERNAME_SITES: UsernameSite[] = [
     name: "Rclone Forum",
     urlTemplate: "https://forum.rclone.org/u/{}",
     detection: "status",
-  },
-  {
-    id: "redtube",
-    name: "RedTube",
-    urlTemplate: "https://www.redtube.com/users/{}",
-    detection: "status",
-    isNSFW: true,
   },
   {
     id: "reverbnation",
@@ -1212,13 +1198,6 @@ export const SHERLOCK_USERNAME_SITES: UsernameSite[] = [
     name: "Scratch",
     urlTemplate: "https://scratch.mit.edu/users/{}",
     detection: "status",
-  },
-  {
-    id: "scribd",
-    name: "Scribd",
-    urlTemplate: "https://www.scribd.com/{}",
-    detection: "message",
-    errorMarkers: ["Page not found"],
   },
   {
     id: "sessionize",
@@ -1709,6 +1688,7 @@ export const SHERLOCK_EXCLUSIONS: SherlockExclusion[] = [
   { name: "Polarsteps", reason: "claimed username \"james\" not detected and no common name matched — rule unverified (site may have changed)" },
   { name: "Polygon", reason: "claimed username \"swiftstickler\" not detected and no common name matched — rule unverified (site may have changed)" },
   { name: "Polymart", reason: "claimed username \"craciu25yt\" not detected and no common name matched — rule unverified (site may have changed)" },
+  { name: "Pornhub", reason: "false positive on production network — control username probed as found from Vercel (passed verification from the VM network); detection rule is network-dependent and unreliable" },
   { name: "Preisjaeger", reason: "unverifiable from verification network (control probe: HTTP 410)" },
   { name: "ProductHunt", reason: "unverifiable from verification network (control probe: HTTP 403 (blocked or rate-limited))" },
   { name: "prog.hu", reason: "unverifiable from verification network (control probe: HTTP 429 (blocked or rate-limited))" },
@@ -1723,6 +1703,7 @@ export const SHERLOCK_EXCLUSIONS: SherlockExclusion[] = [
   { name: "Realmeye", reason: "unverifiable from verification network (control probe: Blocked (bot challenge page))" },
   { name: "Redbubble", reason: "unverifiable from verification network (control probe: HTTP 403 (blocked or rate-limited))" },
   { name: "Reddit", reason: "false positive — control username \"zxqvkjw8472notreal\" probed as found" },
+  { name: "RedTube", reason: "false positive on production network — control username probed as found from Vercel (passed verification from the VM network); detection rule is network-dependent and unreliable" },
   { name: "Reisefrage", reason: "unverifiable from verification network (control probe: HTTP 403 (blocked or rate-limited))" },
   { name: "Replit.com", reason: "unverifiable from verification network (control probe: HTTP 403 (blocked or rate-limited))" },
   { name: "ResearchGate", reason: "unverifiable from verification network (control probe: no control username passes this site regex)" },
@@ -1732,6 +1713,7 @@ export const SHERLOCK_EXCLUSIONS: SherlockExclusion[] = [
   { name: "RuneScape", reason: "unverifiable from verification network (control probe: Request timed out)" },
   { name: "satsisRU", reason: "unverifiable from verification network (control probe: Request timed out)" },
   { name: "Sbazar.cz", reason: "unverifiable from verification network (claimed probe: Request timed out)" },
+  { name: "Scribd", reason: "false positive on production network — control username probed as found from Vercel (passed verification from the VM network); detection rule is network-dependent and unreliable" },
   { name: "SEOForum", reason: "unverifiable from verification network (control probe: Request timed out)" },
   { name: "Shelf", reason: "false positive — control username \"zxqvkjw8472notreal\" probed as found" },
   { name: "Sketchfab", reason: "unverifiable from verification network (claimed probe: Request timed out)" },

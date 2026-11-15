@@ -27,7 +27,7 @@ const CHECK_TYPES = [
   },
   {
     name: "Username",
-    what: "Checks whether the name exists on 259 sites, from GitHub and X to LeetCode and Kaggle.",
+    what: "Checks whether the name exists on 256 sites, from GitHub and X to LeetCode and Kaggle.",
     source: "Live HTTP probing · Sherlock-style detection",
   },
   {

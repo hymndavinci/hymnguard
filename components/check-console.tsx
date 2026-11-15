@@ -46,7 +46,7 @@ const TABS: TabConfig[] = [
     id: "username",
     label: "Username",
     placeholder: "username",
-    hint: "Probed across 259 sites, in chunks — results stream in as each chunk finishes.",
+    hint: "Probed across 256 sites, in chunks — results stream in as each chunk finishes.",
     privacy: "Checked and discarded — never stored.",
   },
   {
