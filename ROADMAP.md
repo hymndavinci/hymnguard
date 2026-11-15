@@ -39,7 +39,7 @@ Phases run sequentially, each verified and deployed before the next starts. Curr
 - **Done when:** control username yields 0 false positives; full sweep completes in reasonable time.
 - **Outcome:** 256 sites live (30 curated + 226 Sherlock-verified of 451 candidates; 225 excluded — 35 false positives, 26 unverified rules, 164 blocked/unreachable from the verification network). Control username probes 0 found on production.
 
-## Phase 2 — Domain & IP expansion (NEXT — mostly free)
+## Phase 2 — Domain & IP expansion (DONE — live 2026-11-15)
 
 Domain additions:
 - **RDAP / WHOIS** — registrar, registration + expiry dates (rdap.org, free, no key).
@@ -55,6 +55,7 @@ New identifier: **IP address**
 - Reputation: AbuseIPDB (free tier, 1,000 checks/day, free key).
 - VPN / proxy / Tor / bot detection (free tiers).
 - No active port scanning of arbitrary IPs — passive data only (Shodan / Censys summaries only via user-provided key, see Phase 5).
+- **Outcome:** all domain additions live + new IP checker live (6 checkers total). RDAP, Wayback, urlscan, tech fingerprinting, DNSBL, DNSSEC, and ip-api verified live on production with known-positive + known-negative cases. OTX + AbuseIPDB implemented from public docs with needs-key states (no keys set yet — untested live). Email-auth grader fixes shipped: SPF redirect following, DKIM records without the `v=DKIM1` prefix, non-empty `p=` required (empty `p=` = revoked key), gmail.com's current DKIM selector 20251104 added (20230601/20161025 are revoked). gmail.com now grades an honest 65/C (was a misleading F). DNSSEC uses RDAP DS + DNSKEY via DoH (Node's `dns.resolve` rejects the DNSKEY type). Excluded: SORBS (stale/unreliable); urlscan verdicts (need a urlscan login — activity only); MultiRBL (Spamhaus + SpamCop cover the need). Reliability fixes from production verification: crt.sh retry (flaky 502/404/timeout), Wayback partial results (CDX data queries 403 for gmail.com but the page count still answers). DNSBL positive path untested on production (no known-listed public IP handy).
 
 ## Phase 3 — Email expansion (DONE — live 2026-11-15)
 
@@ -66,7 +67,7 @@ New identifier: **IP address**
 - Shared with Phase 2: SPF / DKIM / DMARC grading for the email's domain.
 - **Outcome:** enumeration pruned to 7 verified probes (Adobe, Gravatar, Replit, Spotify, X, WordPress.com, XVideos) of 76 candidates — 69 excluded (endpoints changed, bot-blocked, no signal, or no positive confirmation; see README). Breach sources live: LeakCheck + Hudson Rock (free, verified), HIBP + OsintCat + GitHub exposure (keyed, needs-key states until keys are set). CheckLeaked excluded (paid-only, redundant); SMTP deep verification skipped (outbound SMTP blocked on Vercel). Ownership verification needs `RESEND_API_KEY` + `RESEND_FROM` (verified domain) + `VERIFY_SECRET` — until those are set, enumeration reports needs-key and never runs.
 
-## Phase 4 — Phone expansion (limited by free sources)
+## Phase 4 — Phone expansion (NEXT — limited by free sources)
 
 - **PhoneInfoga-style aggregation** — carrier lookup from free sources, prefix databases (including Indonesia prefix data), line-type detection.
 - **Spam / scam reports** — presence in public complaint boards (fragile, scraping-dependent — treat as best-effort).
