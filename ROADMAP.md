@@ -132,11 +132,16 @@ it is client-side only, so `route` is optional on the registry now).
   export (410 Gone); token holdings / identity linking for wallets
   (out of scope — public chain data only).
 
-## Phase 7 — Dossier mode (opt-in, authenticated only)
+## Phase 7 — Dossier mode (opt-in, authenticated only) — DONE (2026-11-16)
 
-- Combine identifiers into one dossier (Maigret-style): username + email + phone cross-referenced into an identity graph.
+- Combine identifiers into one dossier (Maigret-style): username + email + domain + current IP cross-referenced into an identity graph.
 - **Strictly opt-in, own identifiers only** — every identifier must be ownership-verified. No third-party dossiers, no people-search.
-- Mostly product + safety design work; the checkers already exist by then.
+- **Ownership proofs (server-enforced, 403 otherwise):** email via Phase 3 verification token / own verified account email / monitored email; username via local-part of a verified email or GitHub commits by that login using a verified email (needs a GitHub token); domain via DNS TXT record `_hymnguard.<domain>` carrying a stateless HMAC token (24h TTL); IP via request-IP match at build time (typed IPs never accepted).
+- **Excluded (by design, documented in the README):** phone (no SMS channel), wallet (would need message signing), password/hash/URL/image (not identity identifiers).
+- **Architecture:** migration `002_dossier.sql` (`verified_identifiers` + `dossier_runs`); the build script now applies all migrations in order. Chunked, client-driven build (POST `/api/dossier/build` creates the run, POST `/api/dossier/build/chunk` runs one identifier's section, ~9s budget each) because a full dossier can't fit in one 10s invocation. Sections call the checker lib functions directly — the email check was extracted into `runFullEmailCheck` (shared by the route and the dossier) and `checkDomain` gained an `includeSubdomains` option (dossier skips crt.sh, says so honestly). Scoring is pure (`lib/dossier-score.ts`): 0–100, capped, auth grade deduped per domain, bands Low/Moderate/High/Critical, remediations deduped and sorted P1→P3.
+- **UI:** `/dossier` page (dense OpenRouter-style, dark default): verified-identifiers management (email code flow, username, domain TXT flow), build picker (verified identifiers + current IP + optional enumeration with a fresh token), report view (score, cross-refs, remediations, findings, per-identifier sections with the full result components expandable), JSON download + print (light palette forced in print CSS). Dossier link in the header nav and a card on the dashboard. "Re-run in console" prefills the console via localStorage.
+- **Verified:** 47 unit tests (scoring + domain tokens, incl. injected-resolver confirm tests); 70-assertion local E2E (signup → verify → build → chunks → report → 403/400/401 negatives → cleanup); visual QA 0px overflow at 1440/768/390; production E2E with a throwaway account (signup → verify → build → chunks → report, plus the 403 rejection test) — see the phase report. Domain TXT positive path implemented from docs + unit-tested (no domain available to add a record to — same precedent as OTX/AbuseIPDB/IPQS).
+- **Two bugs found by QA and fixed before shipping:** (1) the build picker auto-select effect read a ref inside a setState updater — the ref was already updated by the time the updater ran, so nothing was ever selected (captured the previous ids first); (2) the `no-print` wrapper div made the build section a `:first-child`, killing its top divider (className prop instead).
 
 ---
 

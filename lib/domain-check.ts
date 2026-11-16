@@ -407,10 +407,25 @@ async function checkSubdomains(domain: string): Promise<SubdomainResult> {
 
 export async function checkDomain(
   domain: string,
-  opts: { otxApiKey?: string } = {},
+  opts: { otxApiKey?: string; includeSubdomains?: boolean } = {},
 ): Promise<DomainCheckResult> {
   // DNS runs first: the blocklist check needs the domain's A records.
   const dnsResult = await resolveDns(domain);
+  // crt.sh is the slowest piece of a domain check (~10s worst case); the
+  // dossier skips it — a dossier needs security signals, not the full
+  // subdomain inventory. The skipped state is reported honestly, not as
+  // "0 subdomains".
+  const subdomainPromise =
+    opts.includeSubdomains === false
+      ? Promise.resolve<SubdomainResult>({
+          ok: false,
+          error:
+            "Subdomain enumeration was skipped for this dossier (it is the slowest part of a domain check). Run the full domain check in the console for the subdomain list.",
+          total: 0,
+          subdomains: [],
+          truncated: false,
+        })
+      : checkSubdomains(domain);
 
   const [
     tlsResult,
@@ -427,7 +442,7 @@ export async function checkDomain(
   ] = await Promise.all([
     checkTls(domain),
     checkHeaders(domain),
-    checkSubdomains(domain),
+    subdomainPromise,
     fetchRdap(domain),
     lookupDnskey(domain),
     fetchWayback(domain),

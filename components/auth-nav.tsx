@@ -65,6 +65,12 @@ export default function AuthNav() {
       >
         Dashboard
       </a>
+      <a
+        href="/dossier"
+        className="transition-colors hover:text-black"
+      >
+        Dossier
+      </a>
       <span
         className="hidden max-w-[160px] truncate font-mono text-xs text-gray-500 lg:inline"
         title={user.email}

@@ -644,6 +644,21 @@ function KeysSection() {
 export default function DashboardClient({ userEmail }: { userEmail: string }) {
   return (
     <div className="pb-20">
+      <a
+        href="/dossier"
+        className="mb-10 flex items-center gap-4 rounded-lg border border-gray-200 bg-gray-50 px-5 py-4 transition-colors hover:bg-gray-100"
+      >
+        <div>
+          <div className="text-sm font-semibold">Dossier</div>
+          <p className="mt-0.5 text-[13px] leading-relaxed text-gray-500">
+            One consolidated exposure report for your own verified
+            identifiers — emails, usernames, domains, and your current IP —
+            with an exposure score and prioritized fixes.
+          </p>
+        </div>
+        <span className="ml-auto shrink-0 text-sm font-medium">Open →</span>
+      </a>
+
       <Section
         title="Saved history"
         description="Checks you run while signed in are saved here — identifiers are stored as hashes with masked hints, never in full. Passwords are never stored at all."

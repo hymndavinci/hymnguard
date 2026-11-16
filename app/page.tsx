@@ -95,8 +95,8 @@ export default function Home() {
           Check a password, username, email, domain, IP address, phone
           number, file hash, URL, image, or crypto wallet against public
           breach data and live records. Free, no sign-up needed — and an
-          optional account adds saved history, breach monitoring, and your
-          own API keys.
+          optional account adds saved history, breach monitoring, your own
+          API keys, and a consolidated dossier of your verified identifiers.
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           {["Free forever", "No sign-up needed", "Private by design"].map((badge) => (

@@ -24,14 +24,43 @@ export interface GitHubCommitExposure {
 }
 
 export type GitHubExposureResult =
-  | { status: "ok"; total: number; commits: GitHubCommitExposure[] }
+  | {
+      status: "ok";
+      total: number;
+      commits: GitHubCommitExposure[];
+      /** GitHub logins whose commits carry this email (dossier cross-refs). */
+      logins: string[];
+    }
   | { status: "rate_limited" }
   | { status: "error"; error: string };
 
-export async function searchGitHubCommits(
+/** GitHub logins whose public commits carry this email as the author
+ *  address. Used by dossier username ownership (a login is proven yours
+ *  when its public commits use an email you have already verified). */
+export type GitHubAuthorLoginsResult =
+  | { status: "ok"; logins: string[] }
+  | { status: "rate_limited" }
+  | { status: "error"; error: string };
+
+interface CommitSearchItem {
+  repository?: { full_name?: string };
+  author?: { login?: string } | null;
+  commit?: {
+    author?: { name?: string; date?: string };
+    message?: string;
+  };
+  html_url?: string;
+}
+
+type CommitSearchResult =
+  | { status: "ok"; total: number; items: CommitSearchItem[] }
+  | { status: "rate_limited" }
+  | { status: "error"; error: string };
+
+async function fetchCommitSearch(
   email: string,
   token: string,
-): Promise<GitHubExposureResult> {
+): Promise<CommitSearchResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -69,14 +98,7 @@ export async function searchGitHubCommits(
     }
     const data = (await res.json()) as {
       total_count?: number;
-      items?: {
-        repository?: { full_name?: string };
-        commit?: {
-          author?: { name?: string; date?: string };
-          message?: string;
-        };
-        html_url?: string;
-      }[];
+      items?: CommitSearchItem[];
     };
     if (typeof data.total_count !== "number" || !Array.isArray(data.items)) {
       return {
@@ -84,16 +106,7 @@ export async function searchGitHubCommits(
         error: "GitHub returned an unexpected response shape",
       };
     }
-    const commits: GitHubCommitExposure[] = data.items
-      .filter((item) => item.repository?.full_name)
-      .map((item) => ({
-        repo: item.repository?.full_name as string,
-        authorName: item.commit?.author?.name ?? "—",
-        date: item.commit?.author?.date ?? "",
-        message: (item.commit?.message ?? "").split("\n")[0].slice(0, 80),
-        url: item.html_url ?? "",
-      }));
-    return { status: "ok", total: data.total_count, commits };
+    return { status: "ok", total: data.total_count, items: data.items };
   } catch (err) {
     return {
       status: "error",
@@ -105,4 +118,45 @@ export async function searchGitHubCommits(
   } finally {
     clearTimeout(timer);
   }
+}
+
+export async function searchGitHubCommits(
+  email: string,
+  token: string,
+): Promise<GitHubExposureResult> {
+  const result = await fetchCommitSearch(email, token);
+  if (result.status !== "ok") return result;
+  const commits: GitHubCommitExposure[] = result.items
+    .filter((item) => item.repository?.full_name)
+    .map((item) => ({
+      repo: item.repository?.full_name as string,
+      authorName: item.commit?.author?.name ?? "—",
+      date: item.commit?.author?.date ?? "",
+      message: (item.commit?.message ?? "").split("\n")[0].slice(0, 80),
+      url: item.html_url ?? "",
+    }));
+  const logins = [
+    ...new Set(
+      result.items
+        .map((item) => item.author?.login)
+        .filter((login): login is string => Boolean(login)),
+    ),
+  ];
+  return { status: "ok", total: result.total, commits, logins };
+}
+
+export async function searchCommitAuthorLogins(
+  email: string,
+  token: string,
+): Promise<GitHubAuthorLoginsResult> {
+  const result = await fetchCommitSearch(email, token);
+  if (result.status !== "ok") return result;
+  const logins = [
+    ...new Set(
+      result.items
+        .map((item) => item.author?.login)
+        .filter((login): login is string => Boolean(login)),
+    ),
+  ];
+  return { status: "ok", logins };
 }

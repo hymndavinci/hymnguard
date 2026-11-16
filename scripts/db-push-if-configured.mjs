@@ -1,13 +1,13 @@
-// Applies db/migrations/001_init.sql when DATABASE_URL is set; no-op
-// otherwise. Run from the build script so a fresh database gets its
-// tables on deploy. The migration is idempotent (CREATE TABLE/INDEX IF
-// NOT EXISTS), so re-running it is safe.
+// Applies every db/migrations/*.sql file in filename order when
+// DATABASE_URL is set; no-op otherwise. Run from the build script so a
+// fresh database gets its tables on deploy. Migrations are idempotent
+// (CREATE TABLE/INDEX IF NOT EXISTS), so re-running them is safe.
 //
 // On failure the script exits non-zero and fails the build — a database
 // that can't take the schema should block the deploy loudly, not ship a
 // half-working app.
 
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { Client } from "pg";
@@ -19,15 +19,24 @@ if (!url) {
 }
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
-const sql = readFileSync(
-  path.join(dir, "..", "db", "migrations", "001_init.sql"),
-  "utf8",
-);
+const migrationsDir = path.join(dir, "..", "db", "migrations");
+const files = readdirSync(migrationsDir)
+  .filter((f) => f.endsWith(".sql"))
+  .sort();
+
+if (files.length === 0) {
+  console.log("[db-push] No migration files found — skipping.");
+  process.exit(0);
+}
 
 const client = new Client({ connectionString: url });
 try {
   await client.connect();
-  await client.query(sql);
+  for (const file of files) {
+    const sql = readFileSync(path.join(migrationsDir, file), "utf8");
+    await client.query(sql);
+    console.log(`[db-push] Applied ${file}.`);
+  }
   console.log("[db-push] Schema is up to date.");
 } catch (err) {
   console.error(

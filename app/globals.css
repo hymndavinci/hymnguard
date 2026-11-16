@@ -155,3 +155,50 @@ body {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* Print: the dossier report is exportable via Print / Save as PDF. The
+   header, footer, and interactive controls stay on screen only, and the
+   palette is forced back to the light values so a dark-mode report does
+   not print as a black page. */
+@media print {
+  :root,
+  .dark {
+    color-scheme: light;
+    --hg-white: #ffffff;
+    --hg-black: #000000;
+    --hg-gray-50: #f9fafb;
+    --hg-gray-100: #f3f4f6;
+    --hg-gray-200: #e5e7eb;
+    --hg-gray-300: #d1d5db;
+    --hg-gray-400: #9ca3af;
+    --hg-gray-500: #6b7280;
+    --hg-gray-600: #4b5563;
+    --hg-gray-700: #374151;
+    --hg-gray-800: #1f2937;
+    --hg-gray-900: #111827;
+    --hg-red-50: #fef2f2;
+    --hg-red-200: #fecaca;
+    --hg-red-500: #ef4444;
+    --hg-red-700: #b91c1c;
+    --hg-red-900: #7f1d1d;
+    --hg-green-50: #f0fdf4;
+    --hg-green-200: #bbf7d0;
+    --hg-green-500: #22c55e;
+    --hg-green-700: #15803d;
+    --hg-green-900: #14532d;
+    --hg-amber-50: #fffbeb;
+    --hg-amber-200: #fde68a;
+    --hg-amber-500: #f59e0b;
+    --hg-amber-700: #b45309;
+    --hg-amber-800: #92400e;
+    --hg-amber-900: #78350f;
+  }
+  header,
+  footer,
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #ffffff !important;
+  }
+}

@@ -306,6 +306,27 @@ export default function CheckConsole() {
 
   const tab = TABS.find((t) => t.id === activeTab) ?? TABS[0];
 
+  // Dossier "Re-run in console": the dossier page stores { tab, input }
+  // in localStorage and navigates here. Pick it up once, then clear it.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("hymnguard:console-prefill");
+      if (!raw) return;
+      localStorage.removeItem("hymnguard:console-prefill");
+      const prefill = JSON.parse(raw) as { tab?: unknown; input?: unknown };
+      const tabId = typeof prefill.tab === "string" ? prefill.tab : "";
+      const input = typeof prefill.input === "string" ? prefill.input : "";
+      if (TABS.some((t) => t.id === tabId)) {
+        setActiveTab(tabId as CheckType);
+        if (input) {
+          setInputs((prev) => ({ ...prev, [tabId]: input }));
+        }
+      }
+    } catch {
+      // Corrupt prefill — ignore it.
+    }
+  }, []);
+
   useEffect(() => {
     setHistory(loadHistory());
     setHistoryLoaded(true);

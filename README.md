@@ -124,8 +124,8 @@ exactly as before — all ten checkers work anonymously.
    Production): `DATABASE_URL` (the pooled connection string),
    `SESSION_SECRET`, `ENCRYPTION_KEY`, `CRON_SECRET` (generate with the
    commands in `.env.example`).
-3. Redeploy (or push). The build applies `db/migrations/001_init.sql`
-   automatically when `DATABASE_URL` is set.
+3. Redeploy (or push). The build applies every `db/migrations/*.sql`
+   file in filename order automatically when `DATABASE_URL` is set.
 4. Optionally set `RESEND_API_KEY` + `RESEND_FROM` so signup and
    password-reset codes can be emailed (without Resend, signup creates
    the account immediately, unverified; monitoring alerts can't be
@@ -135,6 +135,57 @@ exactly as before — all ten checkers work anonymously.
 Google OAuth is not implemented: creating an OAuth client needs the
 owner's Google Cloud Console. The schema reserves `users.provider` and
 `users.google_sub` for it.
+
+## Dossier mode
+
+A consolidated exposure report built from your **own verified
+identifiers only** (Phase 7, authenticated). Pick emails, usernames,
+domains, and your current IP; each is checked live with the existing
+checkers, and the results are combined into one report: an exposure
+score (0–100), findings with points, prioritized remediation steps,
+and cross-references between your identifiers (e.g. a username that is
+the local-part of your email). The latest dossier is saved per user
+and re-runnable; export it as JSON or print it (Print / Save as PDF).
+
+**Ownership is enforced server-side, not just in the UI.** A dossier
+build only accepts identifiers from the user's verified set — anything
+else is rejected with 403 and no run is created. The proofs:
+
+- **Email** — a Phase 3 verification token (a 6-digit code sent to the
+  address), or the user's own verified account email, or a monitored
+  email (ownership-verified when the monitor was created).
+- **Username** — the local-part of an already-verified email, or a
+  GitHub login whose public commits use a verified email as the author
+  email (needs a GitHub token).
+- **Domain** — a DNS TXT record at `_hymnguard.<domain>` carrying a
+  valid HMAC verification token (24h TTL, stateless).
+- **IP** — the requester's own current public IP, verified per build by
+  matching the request IP. Typed IP values are never accepted.
+
+**Excluded by design:** phone numbers (no SMS verification channel),
+crypto wallets (would need message signing), and password/hash/URL/
+image (not identity identifiers — they can't be "owned" in any
+verifiable sense). There is no "check someone else" path: no
+third-party dossiers, no people-search.
+
+**How it runs:** a build creates a run, then the client drives one
+chunk request per identifier (a full dossier can't fit in one 10-second
+serverless invocation). Each section runs the real checker modules — a
+dossier email section *is* the console email check — except the domain
+section skips the slow subdomain enumeration (crt.sh, ~10s worst case)
+and says so honestly. Dossier checks always run fresh, never from the
+result cache. Each section has a 9-second budget; a section that runs
+longer is recorded as an honest timeout and the run finalizes as
+partial. Emails are stored AES-256-GCM encrypted in the run and shown
+masked everywhere; the API never returns raw values or encrypted blobs
+to the client.
+
+**Scoring:** breach records and infostealer exposure weigh heaviest
+(LeakCheck +5/record capped at 30, HIBP +5/breach capped at 25, Hudson
+Rock +20); surface (username registrations, headers) weighs least.
+Each domain's email-auth grade is counted once per dossier. Bands:
+0–19 Low, 20–39 Moderate, 40–64 High, 65–100 Critical. Every finding
+carries its points, so the score is explainable.
 
 ## Privacy rules
 
