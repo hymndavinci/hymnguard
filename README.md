@@ -224,7 +224,7 @@ carries its points, so the score is explainable.
 | `HYBRID_ANALYSIS_API_KEY` | No | Hybrid Analysis API key for the hash checker (Falcon Sandbox verdicts). Free Public API key at https://www.hybrid-analysis.com. Without it, the hash checker shows a "not configured" state for Hybrid Analysis. (Implemented from the public docs; not yet tested live — no key has been available.) |
 | `SAFE_BROWSING_API_KEY` | No | Google Safe Browsing API key for the URL checker (malware / social-engineering / unwanted-software lists). Free tier (10,000 req/day) from Google Cloud Console. Without it, the URL checker shows a "not configured" state for Safe Browsing. (Implemented from the public docs; not yet tested live — no key has been available.) |
 | `ETHERSCAN_API_KEY` | No | Etherscan API key for the wallet checker (one key covers Ethereum + BNB Chain via the unified v2 API). Free tier at https://etherscan.io. Without it, the wallet check has no source at all and reports "needs an Etherscan API key". (Implemented from the public docs; not yet tested live — no key has been available.) |
-| `VERIFY_SECRET` | No* | Random secret for signing ownership-verification tokens. Required together with `RESEND_API_KEY` to enable account enumeration. Generate with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`. |
+| `VERIFY_SECRET` | No* | Random secret for signing ownership-verification tokens. Required together with `RESEND_API_KEY` to enable account enumeration, and required on its own for dossier email verification and the domain TXT verification flow. Generate with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`. |
 | `RESEND_API_KEY` | No* | Resend API key for sending ownership-verification codes. Get one at https://resend.com (free tier available). Required together with `VERIFY_SECRET` to enable account enumeration. |
 | `RESEND_FROM` | No* | Sender address for verification codes. Resend's free tier only sends from `onboarding@resend.dev` to the account owner's own address — to send codes to arbitrary emails, verify a domain you own in Resend and set this to an address on it (e.g. `noreply@yourdomain.com`). |
 | `DATABASE_URL` | No† | Postgres connection string (Neon pooled URL recommended). Enables accounts: saved history, breach monitoring, BYOK, and the DB-backed cache. The schema is applied automatically on the next build. |
@@ -233,7 +233,10 @@ carries its points, so the score is explainable.
 | `CRON_SECRET` | No† | Random secret the monitor cron must present as a Bearer token. Vercel Cron sends it automatically when set. Generate like `SESSION_SECRET`. |
 
 \* Without `VERIFY_SECRET` + `RESEND_API_KEY`, enumeration reports a
-"not configured" state and never runs.
+"not configured" state and never runs. Without `VERIFY_SECRET` alone,
+dossier email verification and domain TXT verification report "not
+configured" (the domain flow needs only the secret; the email code flow
+also needs Resend to send the code).
 
 † Without `DATABASE_URL` (+ `SESSION_SECRET` for sign-in,
 `ENCRYPTION_KEY` for BYOK/monitoring, `CRON_SECRET` for the cron), the
