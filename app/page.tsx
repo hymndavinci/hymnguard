@@ -1,4 +1,5 @@
 import CheckConsole from "@/components/check-console";
+import { CHECKERS, KEY_PROVIDERS } from "@/lib/checkers";
 
 const PRIVACY_POINTS = [
   {
@@ -83,21 +84,21 @@ const CHECK_TYPES = [
 export default function Home() {
   return (
     <main className="wrap">
-      <section className="pb-10 pt-14 sm:pt-20">
+      <section className="pb-6 pt-8">
         <p className="font-mono text-xs font-medium uppercase tracking-[0.2em] text-gray-500">
           Free security exposure checker
         </p>
-        <h1 className="mt-4 max-w-2xl text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl">
+        <h1 className="mt-3 max-w-2xl text-3xl font-semibold leading-[1.1] tracking-tight sm:text-4xl">
           Know where you&rsquo;re exposed.
         </h1>
-        <p className="mt-4 max-w-2xl text-lg leading-relaxed text-gray-500">
+        <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-gray-500">
           Check a password, username, email, domain, IP address, phone
           number, file hash, URL, image, or crypto wallet against public
           breach data and live records. Free, no sign-up needed — and an
           optional account adds saved history, breach monitoring, and your
           own API keys.
         </p>
-        <div className="mt-6 flex flex-wrap gap-2">
+        <div className="mt-4 flex flex-wrap gap-2">
           {["Free forever", "No sign-up needed", "Private by design"].map((badge) => (
             <span
               key={badge}
@@ -108,11 +109,30 @@ export default function Home() {
             </span>
           ))}
         </div>
+        <dl className="mt-6 grid grid-cols-2 overflow-hidden rounded-lg border border-gray-200 sm:grid-cols-4">
+          {[
+            { value: String(CHECKERS.length), label: "checkers" },
+            { value: "256", label: "username sites probed" },
+            { value: String(KEY_PROVIDERS.length), label: "BYOK key providers" },
+            { value: "10/min", label: "rate limit per check" },
+          ].map((stat, index) => (
+            <div
+              key={stat.label}
+              className={`border-gray-200 px-4 py-3 ${index > 0 ? "border-l" : ""} ${index >= 2 ? "max-sm:border-t" : ""} ${index === 2 ? "max-sm:border-l-0" : ""}`}
+            >
+              <dt className="sr-only">{stat.label}</dt>
+              <dd className="font-mono text-xl font-semibold leading-none tracking-tight">
+                {stat.value}
+              </dd>
+              <dd className="mt-1 text-xs text-gray-500">{stat.label}</dd>
+            </div>
+          ))}
+        </dl>
       </section>
 
       <CheckConsole />
 
-      <section id="privacy" className="mt-16 scroll-mt-20 border-t border-gray-200 pb-16 pt-12">
+      <section id="privacy" className="mt-10 scroll-mt-20 border-t border-gray-200 pb-10 pt-8">
         <h2 className="text-lg font-semibold tracking-tight">
           How privacy works
         </h2>
@@ -120,11 +140,11 @@ export default function Home() {
           A security tool should not become another place your data leaks.
           These are the rules the whole app is built on.
         </p>
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {PRIVACY_POINTS.map((point) => (
             <div
               key={point.title}
-              className="rounded-lg border border-gray-200 bg-white p-5"
+              className="rounded-lg border border-gray-200 bg-white p-4"
             >
               <h3 className="text-sm font-semibold">{point.title}</h3>
               <p className="mt-1.5 text-[13px] leading-relaxed text-gray-500">
@@ -135,7 +155,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="checks" className="scroll-mt-20 border-t border-gray-200 pb-20 pt-12">
+      <section id="checks" className="scroll-mt-20 border-t border-gray-200 pb-12 pt-8">
         <h2 className="text-lg font-semibold tracking-tight">
           What each check does
         </h2>
@@ -148,13 +168,13 @@ export default function Home() {
             <tbody className="divide-y divide-gray-100">
               {CHECK_TYPES.map((check) => (
                 <tr key={check.name}>
-                  <td className="w-28 px-4 py-4 align-top font-semibold sm:px-5">
+                  <td className="w-24 px-4 py-2.5 align-top font-semibold sm:px-5">
                     {check.name}
                   </td>
-                  <td className="px-4 py-4 align-top text-[13px] leading-relaxed text-gray-600 sm:px-5">
+                  <td className="px-4 py-2.5 align-top text-[13px] leading-relaxed text-gray-600 sm:px-5">
                     {check.what}
                   </td>
-                  <td className="hidden px-4 py-4 align-top font-mono text-xs leading-relaxed text-gray-500 sm:table-cell sm:px-5">
+                  <td className="hidden px-4 py-2.5 align-top font-mono text-xs leading-relaxed text-gray-500 sm:table-cell sm:px-5">
                     {check.source}
                   </td>
                 </tr>

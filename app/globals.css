@@ -1,10 +1,119 @@
 @import "tailwindcss";
 
+/* Theme system: dark mode is the DEFAULT.
+ *
+ * The palette is defined as CSS variables, and Tailwind's color
+ * utilities are wired to those variables via `@theme inline` — so the
+ * whole app flips between light and dark by redefining the variables
+ * under `.dark`. No per-component `dark:` variants are needed; every
+ * gray/white/black/red/green/amber utility used in the app is covered
+ * here. Light values are Tailwind's defaults; dark values are
+ * near-black neutrals with lightened text for contrast.
+ *
+ * The `.dark` class is set on <html> by a blocking inline script in
+ * app/layout.tsx (localStorage `hymnguard-theme`, default dark) so the
+ * first paint already has the right theme. */
+
+@theme inline {
+  --color-white: var(--hg-white);
+  --color-black: var(--hg-black);
+  --color-gray-50: var(--hg-gray-50);
+  --color-gray-100: var(--hg-gray-100);
+  --color-gray-200: var(--hg-gray-200);
+  --color-gray-300: var(--hg-gray-300);
+  --color-gray-400: var(--hg-gray-400);
+  --color-gray-500: var(--hg-gray-500);
+  --color-gray-600: var(--hg-gray-600);
+  --color-gray-700: var(--hg-gray-700);
+  --color-gray-800: var(--hg-gray-800);
+  --color-gray-900: var(--hg-gray-900);
+  --color-red-50: var(--hg-red-50);
+  --color-red-200: var(--hg-red-200);
+  --color-red-500: var(--hg-red-500);
+  --color-red-700: var(--hg-red-700);
+  --color-red-900: var(--hg-red-900);
+  --color-green-50: var(--hg-green-50);
+  --color-green-200: var(--hg-green-200);
+  --color-green-500: var(--hg-green-500);
+  --color-green-700: var(--hg-green-700);
+  --color-green-900: var(--hg-green-900);
+  --color-amber-50: var(--hg-amber-50);
+  --color-amber-200: var(--hg-amber-200);
+  --color-amber-500: var(--hg-amber-500);
+  --color-amber-700: var(--hg-amber-700);
+  --color-amber-800: var(--hg-amber-800);
+  --color-amber-900: var(--hg-amber-900);
+}
+
 @theme {
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo,
     Consolas, monospace;
+}
+
+:root {
+  color-scheme: light;
+  --hg-white: #ffffff;
+  --hg-black: #000000;
+  --hg-gray-50: #f9fafb;
+  --hg-gray-100: #f3f4f6;
+  --hg-gray-200: #e5e7eb;
+  --hg-gray-300: #d1d5db;
+  --hg-gray-400: #9ca3af;
+  --hg-gray-500: #6b7280;
+  --hg-gray-600: #4b5563;
+  --hg-gray-700: #374151;
+  --hg-gray-800: #1f2937;
+  --hg-gray-900: #111827;
+  --hg-red-50: #fef2f2;
+  --hg-red-200: #fecaca;
+  --hg-red-500: #ef4444;
+  --hg-red-700: #b91c1c;
+  --hg-red-900: #7f1d1d;
+  --hg-green-50: #f0fdf4;
+  --hg-green-200: #bbf7d0;
+  --hg-green-500: #22c55e;
+  --hg-green-700: #15803d;
+  --hg-green-900: #14532d;
+  --hg-amber-50: #fffbeb;
+  --hg-amber-200: #fde68a;
+  --hg-amber-500: #f59e0b;
+  --hg-amber-700: #b45309;
+  --hg-amber-800: #92400e;
+  --hg-amber-900: #78350f;
+}
+
+.dark {
+  color-scheme: dark;
+  --hg-white: #0a0a0a;
+  --hg-black: #fafafa;
+  --hg-gray-50: #101010;
+  --hg-gray-100: #171717;
+  --hg-gray-200: #262626;
+  --hg-gray-300: #3f3f3f;
+  --hg-gray-400: #8a8a8a;
+  --hg-gray-500: #a3a3a3;
+  --hg-gray-600: #c9c9c9;
+  --hg-gray-700: #d4d4d4;
+  --hg-gray-800: #e5e5e5;
+  --hg-gray-900: #fafafa;
+  --hg-red-50: #1e1214;
+  --hg-red-200: #5b2226;
+  --hg-red-500: #f87171;
+  --hg-red-700: #fca5a5;
+  --hg-red-900: #fecaca;
+  --hg-green-50: #0e1a12;
+  --hg-green-200: #1d3d24;
+  --hg-green-500: #4ade80;
+  --hg-green-700: #86efac;
+  --hg-green-900: #bbf7d0;
+  --hg-amber-50: #1e1810;
+  --hg-amber-200: #4a3410;
+  --hg-amber-500: #fbbf24;
+  --hg-amber-700: #fcd34d;
+  --hg-amber-800: #fde68a;
+  --hg-amber-900: #fef3c7;
 }
 
 html {
@@ -18,6 +127,19 @@ body {
 ::selection {
   background: #000;
   color: #fff;
+}
+
+.dark ::selection {
+  background: #fafafa;
+  color: #0a0a0a;
+}
+
+/* Keep autofilled inputs readable in dark mode (Chrome paints its own
+   pale background otherwise). */
+.dark input:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px #171717 inset;
+  -webkit-text-fill-color: #fafafa;
+  caret-color: #fafafa;
 }
 
 /* One container for header, main, and footer (1200px, Vercel dashboard width). */

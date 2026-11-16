@@ -77,6 +77,101 @@ const EMPTY_INPUTS: Record<CheckType, string> = {
   wallet: "",
 };
 
+// Sidebar grouping (OpenRouter-style dense navigation). The same groups
+// drive the desktop sidebar and the mobile checker menu, so every
+// checker is reachable at every width.
+const CHECKER_GROUPS: { label: string; ids: CheckType[] }[] = [
+  { label: "Identity", ids: ["email", "username", "phone"] },
+  { label: "Infrastructure", ids: ["domain", "ip", "url"] },
+  { label: "Content & secrets", ids: ["password", "hash", "image", "wallet"] },
+];
+
+const CHECKER_BLURBS: Record<CheckType, string> = {
+  email: "Breaches · auth grade",
+  username: "256 sites",
+  phone: "Carrier · spam reports",
+  domain: "DNS · TLS · headers",
+  ip: "Geo · reputation · Tor",
+  url: "Malware · phishing lists",
+  password: "Breach count",
+  hash: "Malware reputation",
+  image: "EXIF · GPS (local)",
+  wallet: "Balance · activity",
+};
+
+// Per-checker empty-state copy — written out explicitly so the article
+// is always grammatical ("an email", "a username", "a URL").
+const EMPTY_HINTS: Record<CheckType, string> = {
+  email: "Enter an email address above and run the check.",
+  username: "Enter a username above and run the check.",
+  domain: "Enter a domain above and run the check.",
+  ip: "Enter a public IP address above and run the check.",
+  phone: "Enter a phone number above and run the check.",
+  password: "Enter a password above and run the check.",
+  hash: "Enter a file hash above and run the check.",
+  url: "Enter a URL above and run the check.",
+  image:
+    "Choose an image file above and analyze it — metadata is read in your browser, never uploaded.",
+  wallet: "Enter a wallet address above and run the check.",
+};
+
+function groupOf(id: CheckType): string {
+  return CHECKER_GROUPS.find((g) => g.ids.includes(id))?.label ?? "Checkers";
+}
+
+/** Grouped checker list, shared by the desktop sidebar and the mobile
+ *  checker menu. `onSelect` runs after a checker is picked (the mobile
+ *  menu uses it to close itself). */
+function CheckerNav({
+  activeTab,
+  onPick,
+}: {
+  activeTab: CheckType;
+  onPick: (id: CheckType) => void;
+}) {
+  return (
+    <nav aria-label="Check type" className="py-2">
+      {CHECKER_GROUPS.map((group) => (
+        <div key={group.label} className="mt-1 first:mt-0">
+          <p className="px-4 pb-0.5 pt-1.5 font-mono text-[11px] font-medium uppercase tracking-wider text-gray-500">
+            {group.label}
+          </p>
+          {group.ids.map((id) => {
+            const item = TABS.find((t) => t.id === id) ?? TABS[0];
+            const active = activeTab === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                aria-current={active ? "true" : undefined}
+                onClick={() => onPick(id)}
+                className={`relative block w-full px-4 py-1.5 text-left transition-colors ${
+                  active
+                    ? "bg-gray-100 text-black"
+                    : "text-gray-500 hover:bg-gray-50 hover:text-black"
+                }`}
+              >
+                {active ? (
+                  <span
+                    className="absolute left-0 top-0 h-full w-0.5 bg-black"
+                    aria-hidden="true"
+                  />
+                ) : null}
+                <span className="block text-sm font-medium">
+                  {item.label}
+                </span>
+                <span className="block text-[11px] leading-snug text-gray-500">
+                  {CHECKER_BLURBS[id]}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ))}
+    </nav>
+  );
+}
+
 function summaryFor(result: CheckResultState): string {
   switch (result.type) {
     case "email": {
@@ -206,6 +301,7 @@ export default function CheckConsole() {
   const loggedInRef = useRef(false);
   const imageFileRef = useRef<File | null>(null);
   const [imageFileName, setImageFileName] = useState<string | null>(null);
+  const [navOpen, setNavOpen] = useState(false);
   const elapsedTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const tab = TABS.find((t) => t.id === activeTab) ?? TABS[0];
@@ -434,6 +530,19 @@ export default function CheckConsole() {
     [],
   );
 
+  const canRun =
+    !running &&
+    (activeTab === "image"
+      ? !!imageFileName
+      : !!inputs[activeTab].trim());
+  // Primary when runnable, clearly-but-honestly disabled when empty —
+  // never the half-transparent black button that looked broken.
+  const runButtonClassName = `h-11 shrink-0 rounded-md px-6 text-sm font-medium transition-colors ${
+    canRun
+      ? "bg-black text-white hover:bg-gray-800"
+      : "cursor-not-allowed border border-gray-200 bg-gray-50 text-gray-400"
+  }`;
+
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (running) return;
@@ -476,30 +585,76 @@ export default function CheckConsole() {
         id="console"
         className="scroll-mt-20 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
       >
-        <div className="border-b border-gray-200 px-4 pt-4 sm:px-5">
-          <div
-            role="tablist"
-            aria-label="Check type"
-            className="no-scrollbar inline-flex max-w-full gap-1 overflow-x-auto rounded-lg bg-gray-100 p-1"
-          >
-            {TABS.map((item) => (
+        <div className="flex">
+          {/* Desktop sidebar — grouped checker navigation. */}
+          <aside className="hidden w-60 shrink-0 flex-col border-r border-gray-200 lg:flex">
+            <div className="border-b border-gray-200 px-4 py-3">
+              <p className="font-mono text-[11px] font-medium uppercase tracking-wider text-gray-500">
+                Checkers
+              </p>
+              <p className="mt-0.5 text-xs text-gray-500">
+                {TABS.length} available — pick one to start.
+              </p>
+            </div>
+            <CheckerNav
+              activeTab={activeTab}
+              onPick={(id) => setActiveTab(id)}
+            />
+          </aside>
+
+          <div className="min-w-0 flex-1">
+            {/* Mobile checker picker — an expandable grouped menu, so
+                all 10 checkers are reachable at 390px with nothing cut
+                off (the old tab row hid 6 of them). */}
+            <div className="border-b border-gray-200 lg:hidden">
               <button
-                key={item.id}
-                role="tab"
-                aria-selected={activeTab === item.id}
-                onClick={() => setActiveTab(item.id)}
-                className={`whitespace-nowrap rounded-md px-3.5 py-1.5 text-sm font-medium transition-all ${
-                  activeTab === item.id
-                    ? "bg-white text-black shadow-sm ring-1 ring-gray-200"
-                    : "text-gray-500 hover:text-black"
-                }`}
+                type="button"
+                onClick={() => setNavOpen((prev) => !prev)}
+                aria-expanded={navOpen}
+                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
               >
-                {item.label}
+                <span className="min-w-0">
+                  <span className="block font-mono text-[11px] font-medium uppercase tracking-wider text-gray-500">
+                    {groupOf(activeTab)} · Checker
+                  </span>
+                  <span className="mt-0.5 block truncate text-sm font-semibold">
+                    {tab.label}
+                    <span className="ml-1.5 font-normal text-gray-500">
+                      {CHECKER_BLURBS[activeTab]}
+                    </span>
+                  </span>
+                </span>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className={`shrink-0 text-gray-500 transition-transform ${navOpen ? "rotate-180" : ""}`}
+                  aria-hidden="true"
+                >
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
               </button>
-            ))}
-          </div>
-          <p className="py-3 text-[13px] text-gray-500">{tab.hint}</p>
-        </div>
+              {navOpen ? (
+                <div className="border-t border-gray-100">
+                  <CheckerNav
+                    activeTab={activeTab}
+                    onPick={(id) => {
+                      setActiveTab(id);
+                      setNavOpen(false);
+                    }}
+                  />
+                </div>
+              ) : null}
+            </div>
+
+            <p className="border-b border-gray-200 px-4 py-3 text-[13px] text-gray-500 sm:px-5">
+              {tab.hint}
+            </p>
 
         <form onSubmit={handleSubmit} className="p-4 sm:p-5">
           <label
@@ -544,7 +699,7 @@ export default function CheckConsole() {
               <button
                 type="submit"
                 disabled={running || !imageFileName}
-                className="h-11 shrink-0 rounded-md bg-black px-6 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40"
+                className={runButtonClassName}
               >
                 {running ? "Analyzing…" : "Analyze"}
               </button>
@@ -589,7 +744,7 @@ export default function CheckConsole() {
             <button
               type="submit"
               disabled={running || !inputs[activeTab].trim()}
-              className="h-11 shrink-0 rounded-md bg-black px-6 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40"
+              className={runButtonClassName}
             >
               {running ? "Running…" : "Run check"}
             </button>
@@ -680,115 +835,111 @@ export default function CheckConsole() {
         ) : null}
 
         {!running && !error && !result ? (
-          <div className="border-t border-gray-200 px-4 py-10 sm:px-5">
-            <div className="rounded-lg border border-dashed border-gray-200 px-4 py-8 text-center">
-              <p className="text-sm font-medium text-gray-700">
-                Results will appear here
-              </p>
-              <p className="mt-1 text-[13px] text-gray-500">
-                {activeTab === "image"
-                  ? "Choose an image file above and analyze it."
-                  : `Enter a ${tab.label.toLowerCase()} above and run the check.`}
-              </p>
-            </div>
+          <div className="border-t border-gray-200 px-4 py-4 sm:px-5">
+            <p className="text-sm text-gray-600">{EMPTY_HINTS[activeTab]}</p>
+            <p className="mt-1 font-mono text-xs leading-relaxed text-gray-500">
+              Sources: {tab.sources.map((s) => s.name).join(" · ")}
+            </p>
           </div>
         ) : null}
-      </section>
-
-      <section id="history" className="mt-12 scroll-mt-20">
-        <div className="flex items-baseline justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight">
-              Recent checks
-            </h2>
-            <p className="mt-1 text-sm text-gray-500">
-              Stored only in this browser. Passwords are never stored — not
-              even here.
-              {loggedIn
-                ? " Signed in — checks are also saved to your account (hashed identifiers, masked hints)."
-                : ""}
-            </p>
+        <section id="history" className="scroll-mt-20 border-t border-gray-200 px-4 py-4 sm:px-5">
+          <div className="flex items-baseline justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight">
+                Recent checks
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Stored only in this browser. Passwords are never stored — not
+                even here.
+                {loggedIn
+                  ? " Signed in — checks are also saved to your account (hashed identifiers, masked hints)."
+                  : ""}
+              </p>
+            </div>
+            {historyLoaded && history.length > 0 ? (
+              <button
+                onClick={handleClearHistory}
+                className="shrink-0 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-[13px] font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-black"
+              >
+                Clear history
+              </button>
+            ) : null}
           </div>
-          {historyLoaded && history.length > 0 ? (
-            <button
-              onClick={handleClearHistory}
-              className="shrink-0 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-[13px] font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-black"
-            >
-              Clear history
-            </button>
-          ) : null}
-        </div>
 
-        <div className="mt-4 overflow-hidden rounded-lg border border-gray-200">
-          {!historyLoaded ? (
-            <p className="px-4 py-6 text-sm text-gray-500">Loading…</p>
-          ) : history.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-gray-500">
-              No checks yet. Run your first check above.
-            </p>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 bg-gray-50 text-left">
-                  <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Type
-                  </th>
-                  <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Input
-                  </th>
-                  <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Result
-                  </th>
-                  <th className="hidden px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-gray-500 sm:table-cell">
-                    When
-                  </th>
-                  <th className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wider text-gray-500" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {history.map((entry) => (
-                  <tr key={entry.id}>
-                    <td className="px-4 py-2.5">
-                      <span className="rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs font-medium capitalize">
-                        {entry.type}
-                      </span>
-                    </td>
-                    <td className="max-w-[180px] truncate px-4 py-2.5 font-mono text-[13px]">
-                      {entry.input || "••••••••"}
-                    </td>
-                    <td className="px-4 py-2.5 text-[13px] text-gray-600">
-                      {entry.summary}
-                    </td>
-                    <td className="hidden whitespace-nowrap px-4 py-2.5 text-[13px] text-gray-500 sm:table-cell">
-                      {new Date(entry.at).toLocaleString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
-                      {entry.type !== "password" &&
-                      entry.type !== "image" &&
-                      entry.input ? (
-                        <button
-                          onClick={() => handleRerun(entry)}
-                          disabled={running}
-                          className="whitespace-nowrap rounded-md px-2 py-1 text-[13px] font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-black disabled:opacity-40"
-                        >
-                          Re-run
-                        </button>
-                      ) : (
-                        <span className="text-xs text-gray-500">—</span>
-                      )}
-                    </td>
+          <div className="mt-4 overflow-hidden rounded-lg border border-gray-200">
+            {!historyLoaded ? (
+              <p className="px-4 py-6 text-sm text-gray-500">Loading…</p>
+            ) : history.length === 0 ? (
+              <p className="px-4 py-6 text-sm text-gray-500">
+                No checks yet. Run your first check above.
+              </p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50 text-left">
+                    <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-gray-500">
+                      Type
+                    </th>
+                    <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-gray-500">
+                      Input
+                    </th>
+                    <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-gray-500">
+                      Result
+                    </th>
+                    <th className="hidden px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-gray-500 sm:table-cell">
+                      When
+                    </th>
+                    <th className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wider text-gray-500" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {history.map((entry) => (
+                    <tr key={entry.id}>
+                      <td className="px-4 py-2.5">
+                        <span className="rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs font-medium capitalize">
+                          {entry.type}
+                        </span>
+                      </td>
+                      <td className="max-w-[180px] truncate px-4 py-2.5 font-mono text-[13px]">
+                        {entry.input || "••••••••"}
+                      </td>
+                      <td className="px-4 py-2.5 text-[13px] text-gray-600">
+                        {entry.summary}
+                      </td>
+                      <td className="hidden whitespace-nowrap px-4 py-2.5 text-[13px] text-gray-500 sm:table-cell">
+                        {new Date(entry.at).toLocaleString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        {entry.type !== "password" &&
+                        entry.type !== "image" &&
+                        entry.input ? (
+                          <button
+                            onClick={() => handleRerun(entry)}
+                            disabled={running}
+                            className="whitespace-nowrap rounded-md px-2 py-1 text-[13px] font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-black disabled:opacity-40"
+                          >
+                            Re-run
+                          </button>
+                        ) : (
+                          <span className="text-xs text-gray-500">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </section>
+          </div>
         </div>
       </section>
+
     </>
   );
 }
